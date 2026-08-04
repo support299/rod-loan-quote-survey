@@ -1,0 +1,54 @@
+{# Compact admin upload row with reject reason #}
+<div class="uploaded-file {% if upload.accepted %}accepted{% elif upload.is_rejected %}rejected{% endif %}" data-upload-id="{{ upload.id }}">
+    <div class="upload-main">
+        <div class="file-info">
+            <div class="file-icon">📎</div>
+            <div class="file-details">
+                <div class="file-name">{{ upload.file_name }}</div>
+                <div class="file-date">Uploaded: {{ upload.uploaded_at|date:"M d, Y H:i" }}</div>
+                {% if upload.accepted %}
+                <div class="file-status status-accepted">
+                    ✓ Accepted{% if upload.accepted_at %} on {{ upload.accepted_at|date:"M d, Y H:i" }}{% endif %}
+                </div>
+                {% elif upload.is_rejected %}
+                <div class="file-status status-rejected">Rejected</div>
+                {% else %}
+                <div class="file-status status-pending">Pending Review</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="file-actions">
+            <a href="{{ upload.file_url }}" target="_blank" class="btn btn-view">View</a>
+            {% if upload.accepted %}
+            <button type="button" class="btn btn-accepted" disabled>Accepted</button>
+            <button type="button" class="btn btn-reject" data-upload-id="{{ upload.id }}" data-action="reject">Reject</button>
+            {% elif upload.is_rejected %}
+            <button type="button" class="btn btn-accept" data-upload-id="{{ upload.id }}" data-action="accept">Accept</button>
+            <button type="button" class="btn btn-edit-reason" data-upload-id="{{ upload.id }}" data-action="edit-reason">Edit reason</button>
+            {% else %}
+            <button type="button" class="btn btn-accept" data-upload-id="{{ upload.id }}" data-action="accept">Accept</button>
+            <button type="button" class="btn btn-reject" data-upload-id="{{ upload.id }}" data-action="reject">Reject</button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if upload.is_rejected and upload.rejection_reason %}
+    <div class="reject-note" data-reason-display="{{ upload.id }}">
+        <div class="reject-note-label">Rejection reason</div>
+        <p class="reject-note-text">{{ upload.rejection_reason }}</p>
+        <div class="reject-note-actions">
+            <button type="button" class="btn-text" data-upload-id="{{ upload.id }}" data-action="edit-reason">Edit</button>
+            <button type="button" class="btn-text btn-text-danger" data-upload-id="{{ upload.id }}" data-action="delete-reason">Remove</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="reject-form" data-reject-form="{{ upload.id }}" hidden>
+        <label class="reject-form-label" for="reject-reason-{{ upload.id }}">Reason for rejection</label>
+        <textarea id="reject-reason-{{ upload.id }}" class="reject-textarea" rows="3" placeholder="Explain what needs to be fixed or re-uploaded…">{{ upload.rejection_reason }}</textarea>
+        <div class="reject-form-actions">
+            <button type="button" class="btn btn-reject" data-upload-id="{{ upload.id }}" data-action="submit-reject">Save reason</button>
+            <button type="button" class="btn btn-view" data-upload-id="{{ upload.id }}" data-action="cancel-reject">Cancel</button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Documents - Needs List</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fc 0%, #e3f2fd 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .modal {
+            max-width: 700px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .modal::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2196f3 0%, #42a5f5 50%, #2196f3 100%);
+        }
+
+        .modal-header {
+            padding: 24px 30px;
+            border-bottom: 1px solid #e3f2fd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%);
+        }
+
+        .modal-header h1 {
+            font-size: 24px;
+            color: #1565c0;
+            font-weight: 700;
+        }
+
+        .modal-header .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+
+        .close-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .section-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .section-title-row .section-title {
+            margin-bottom: 0;
+        }
+
+        .doc-search-wrap {
+            flex: 0 1 280px;
+            min-width: 180px;
+        }
+
+        .doc-search-wrap input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+        }
+
+        .doc-search-wrap input:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 8px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .radio-item:hover {
+            background: #f0f7fc;
+        }
+
+        .radio-item input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #2196f3;
+        }
+
+        .radio-item label {
+            cursor: pointer;
+            color: #333;
+            font-size: 14px;
+            flex: 1;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .checkbox-item:hover {
+            background: #f0f7fc;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #2196f3;
+        }
+
+        .checkbox-item label {
+            cursor: pointer;
+            color: #333;
+            font-size: 14px;
+            flex: 1;
+        }
+
+        .select-all {
+            font-weight: 600;
+            padding: 12px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            color: #1565c0;
+        }
+
+        .modal-footer {
+            padding: 20px 30px;
+            border-top: 1px solid #e3f2fd;
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: #fafafa;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-back {
+            background: #e0e0e0;
+            color: #222;
+            border: 1px solid #bdbdbd;
+        }
+        
+        .btn-back:hover {
+            background: #bdbdbd;
+        }
+        
+        /* Ensure placeholders use the same font throughout (cross-browser) */
+        input::placeholder,
+        textarea::placeholder,
+        input::-webkit-input-placeholder,
+        textarea::-webkit-input-placeholder,
+        input::-moz-placeholder,
+        textarea::-moz-placeholder,
+        input:-ms-input-placeholder,
+        textarea:-ms-input-placeholder,
+        input:-moz-placeholder,
+        textarea:-moz-placeholder {
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 400;
+            font-style: normal;
+            color: #666;
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn-send:hover {
+            background: linear-gradient(135deg, #43a047 0%, #2196f3 100%);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h1>Request Documents</h1>
+                <div class="subtitle">Request needs list</div>
+            </div>
+            <button type="button" class="close-btn" onclick="window.location.href=preserveQueryHref('/{{ request_id }}/request/admin/')">×</button>
+        </div>
+        
+        <div class="modal-body">
+            <div id="alert-container"></div>
+
+            <div class="section-toolbar" id="custom-doc-toolbar" style="display: none;">
+                <button type="button" class="btn-toggle-form" id="toggle-custom-doc" onclick="toggleCustomDocForm()">
+                    Add Custom Document to Selected Print Group
+                </button>
+            </div>
+
+            <div id="custom-document-section" class="collapsible-form">
+                <h3 style="font-size: 16px; font-weight: 600; color: #1565c0; margin-bottom: 16px;">Add Custom Document to Selected Print Group</h3>
+                <form id="custom-document-form">
+                    <input type="hidden" id="custom-document-print-group-id">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div>
+                            <label for="custom-document-category" style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Category <span style="color: #e74c3c;">*</span></label>
+                            <select id="custom-document-category" name="category_id" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                <option value="">Select</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}">{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="custom-document-name" style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Document Name <span style="color: #e74c3c;">*</span></label>
+                            <input type="text" id="custom-document-name" name="name" required placeholder="Enter document name" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label for="custom-document-description" style="display: block; margin-bottom: 8px; color: #333; font-weight: 500; font-size: 14px;">Description <span style="color: #e74c3c;">*</span></label>
+                        <textarea id="custom-document-description" name="description" required placeholder="Enter document description" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; min-height: 80px; resize: vertical;"></textarea>
+                    </div>
+                    <button type="submit" style="background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;">Add Custom Document</button>
+                </form>
+            </div>
+
+            {% if current_request_docs %}
+            <div class="current-request-panel">
+                <h3>Currently requested for this opportunity</h3>
+                <p class="current-request-hint">These documents were already sent. Checkboxes below stay selected so you can update and re-send.</p>
+                {% regroup current_request_docs by print_group_name as docs_by_group %}
+                {% for group in docs_by_group %}
+                <div class="current-request-group">
+                    <div class="current-request-group-title">{{ group.grouper }}</div>
+                    <ul class="current-request-list">
+                        {% for doc in group.list %}
+                        <li>
+                            <strong>{{ doc.name }}</strong>
+                            {% if doc.template_name %}
+                            <span class="current-tpl">Template: {{ doc.template_name }}</span>
+                            {% else %}
+                            <span class="current-tpl missing">No template</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="current-request-panel empty">
+                <h3>Currently requested for this opportunity</h3>
+                <p class="current-request-hint">No documents sent yet for this opportunity.</p>
+            </div>
+            {% endif %}
+
+            <div class="section">
+                <div class="section-title">Select a Need List</div>
+                <p style="font-size: 13px; color: #666; margin-bottom: 12px;">
+                    Previously sent need lists stay checked. Switching lists keeps your selections.
+                    Sending updates only the list you have selected on the radio — other sent lists are not removed.
+                </p>
+                <div class="radio-group" id="need-list-options">
+                    <div class="loading">Loading need lists...</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title-row">
+                    <div class="section-title">Select which documents to request</div>
+                    <div class="doc-search-wrap">
+                        <input type="text" id="documents-search" placeholder="Search documents..." autocomplete="off" disabled>
+                    </div>
+                </div>
+                <div class="checkbox-group" id="documents-list">
+                    <div class="empty-state">Please select a need list first</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-back" onclick="window.location.href=preserveQueryHref('/{{ request_id }}/request/admin/')">Back</button>
+            <button class="btn btn-send" onclick="sendRequest()">Send Request</button>
+        </div>
+    </div>
+
+    <style>
+        #alert-container {
+            margin-bottom: 20px;
+        }
+        .btn-loading { pointer-events: none; opacity: 0.85; cursor: not-allowed; }
+        .btn-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+        @keyframes btn-spin { to { transform: rotate(360deg); } }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .doc-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+        }
+        .doc-row-main {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .template-pick {
+            margin-left: 28px;
+            display: none;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+            max-width: 420px;
+        }
+        .template-pick.show { display: flex; }
+        .template-pick label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #555;
+            margin: 0;
+        }
+        .template-pick .hint-req {
+            font-size: 11px;
+            color: #c62828;
+            margin-left: 6px;
+        }
+        .section-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+        }
+        .btn-toggle-form {
+            background: #fff;
+            color: #1565c0;
+            border: 1px solid #90caf9;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-toggle-form:hover,
+        .btn-toggle-form.open {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        .collapsible-form {
+            display: none;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .collapsible-form.open { display: block; }
+        .ss { position: relative; width: 100%; }
+        .ss-trigger {
+            width: 100%;
+            text-align: left;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            color: #333;
+        }
+        .ss-trigger.empty { color: #888; }
+        .ss-trigger.open {
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
+        }
+        .ss-panel {
+            display: none;
+            position: absolute;
+            z-index: 40;
+            left: 0;
+            right: 0;
+            top: calc(100% + 4px);
+            background: #fff;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            overflow: hidden;
+        }
+        .ss-panel.open { display: block; }
+        .ss-search {
+            width: 100%;
+            padding: 10px 12px;
+            border: none;
+            border-bottom: 1px solid #e3f2fd;
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+        }
+        .ss-options {
+            list-style: none;
+            max-height: 180px;
+            overflow-y: auto;
+            margin: 0;
+            padding: 4px 0;
+        }
+        .ss-options li {
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .ss-options li:hover,
+        .ss-options li.active {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .ss-options li.muted {
+            color: #999;
+            cursor: default;
+        }
+        .ss-options li.muted:hover {
+            background: transparent;
+            color: #999;
+        }
+        .current-request-panel {
+            background: #f0f7fc;
+            border: 1px solid #bbdefb;
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 24px;
+        }
+        .current-request-panel.empty {
+            background: #fafafa;
+            border-color: #e0e0e0;
+        }
+        .current-request-panel h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1565c0;
+            margin: 0 0 6px;
+        }
+        .current-request-hint {
+            font-size: 12px;
+            color: #666;
+            margin: 0 0 12px;
+        }
+        .current-request-group {
+            margin-bottom: 10px;
+        }
+        .current-request-group:last-child {
+            margin-bottom: 0;
+        }
+        .current-request-group-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+        }
+        .current-request-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 6px;
+        }
+        .current-request-list li {
+            background: #fff;
+            border: 1px solid #e3f2fd;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #333;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: baseline;
+        }
+        .current-tpl {
+            font-size: 11px;
+            color: #1565c0;
+            background: #e3f2fd;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .current-tpl.missing {
+            color: #c62828;
+            background: #ffebee;
+        }
+        .pg-selected-badge {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #1565c0;
+            background: #e3f2fd;
+            padding: 2px 8px;
+            border-radius: 999px;
+            vertical-align: middle;
+        }
+    </style>
+    <script src="{% static 'documents/ghl_location.js' %}"></script>
+    <script>
+        if (typeof withLocationQuery !== 'function') {
+            window.withLocationQuery = function(url) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id) return url;
+                return url + (url.includes('?') ? '&' : '?') + 'location_id=' + encodeURIComponent(id);
+            };
+        }
+        if (typeof withLocationJsonBody !== 'function') {
+            window.withLocationJsonBody = function(obj) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id || !obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+                return { ...obj, location_id: id };
+            };
+        }
+        if (typeof preserveQueryHref !== 'function') {
+            window.preserveQueryHref = function(path) {
+                return path + (window.location.search || '');
+            };
+        }
+    </script>
+    <script>
+        const requestId = '{{ request_id }}';
+        let printGroups = [];
+        let selectedPrintGroup = null;
+        let documents = [];
+        let selectedDocuments = [];
+        let templates = [];
+        // document_id -> template_id (for active print group)
+        let selectedTemplates = {};
+        // Persist checkbox/template state per print group while switching radios
+        const selectionsByPg = {};
+        const templatesByPg = {};
+        const existingSelections = JSON.parse('{{ selected_by_print_group|escapejs }}');
+        const existingTemplatesByPg = JSON.parse('{{ selected_templates_by_print_group|escapejs }}');
+
+        // Seed from what was previously sent (so badges/checks restore when reopening a list)
+        Object.keys(existingSelections || {}).forEach(function (pgKey) {
+            if (pgKey === 'null') return;
+            selectionsByPg[pgKey] = (existingSelections[pgKey] || []).map(function (id) {
+                return parseInt(id, 10);
+            });
+        });
+        Object.keys(existingTemplatesByPg || {}).forEach(function (pgKey) {
+            if (pgKey === 'null') return;
+            templatesByPg[pgKey] = {};
+            const map = existingTemplatesByPg[pgKey] || {};
+            Object.keys(map).forEach(function (docId) {
+                templatesByPg[pgKey][parseInt(docId, 10)] = parseInt(map[docId], 10);
+            });
+        });
+
+        function pgKey(id) {
+            return String(id);
+        }
+
+        function saveActivePrintGroupState() {
+            if (selectedPrintGroup == null) return;
+            const key = pgKey(selectedPrintGroup);
+            selectionsByPg[key] = selectedDocuments.slice();
+            templatesByPg[key] = Object.assign({}, selectedTemplates);
+        }
+
+        function loadPrintGroupState(printGroupId) {
+            const key = pgKey(printGroupId);
+            selectedDocuments = (selectionsByPg[key] || []).slice();
+            selectedTemplates = Object.assign({}, templatesByPg[key] || {});
+        }
+
+        function setButtonLoading(btn, loading) {
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.classList.add('btn-loading');
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="btn-spinner"></span> Loading...';
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+                btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+            }
+        }
+
+        async function loadTemplates() {
+            try {
+                const response = await fetch(withLocationQuery('/api/account/needs-list-templates/'));
+                const data = await response.json();
+                if (!response.ok) {
+                    templates = [];
+                    console.warn('Templates load failed', data.error);
+                    return;
+                }
+                templates = data.templates || [];
+                if (!data.templates_parent_id) {
+                    showAlert('Templates folder is not configured for this location. Configure templates_parent_id before sending.', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                templates = [];
+            }
+        }
+
+        async function loadPrintGroups() {
+            try {
+                const response = await fetch(withLocationQuery(`/api/print-groups/?request_id=${requestId}`));
+                const data = await response.json();
+                printGroups = data.print_groups;
+                renderPrintGroups();
+
+                // Restore previously sent need list as the active radio + checked docs
+                const pgIdsWithSelections = Object.keys(selectionsByPg).filter(function (key) {
+                    return (selectionsByPg[key] || []).length > 0;
+                });
+                if (pgIdsWithSelections.length > 0) {
+                    // Prefer first print group in catalog order that has prior selections
+                    let restoreId = null;
+                    for (let i = 0; i < printGroups.length; i++) {
+                        if (pgIdsWithSelections.indexOf(pgKey(printGroups[i].id)) !== -1) {
+                            restoreId = printGroups[i].id;
+                            break;
+                        }
+                    }
+                    if (restoreId == null) {
+                        restoreId = parseInt(pgIdsWithSelections[0], 10);
+                    }
+                    const radio = document.getElementById('pg-' + restoreId);
+                    if (radio) radio.checked = true;
+                    await selectPrintGroup(restoreId);
+                }
+            } catch (error) {
+                console.error('Error loading print groups:', error);
+            }
+        }
+
+        function renderPrintGroups() {
+            const container = document.getElementById('need-list-options');
+            container.innerHTML = '';
+            
+            printGroups.forEach(pg => {
+                const item = document.createElement('div');
+                item.className = 'radio-item';
+                const checked = selectedPrintGroup === pg.id ? 'checked' : '';
+                item.innerHTML = `
+                    <input type="radio" name="need-list" id="pg-${pg.id}" value="${pg.id}" ${checked} onchange="selectPrintGroup(${pg.id})">
+                    <label for="pg-${pg.id}">${escapeHtml(pg.name)}</label>
+                `;
+                container.appendChild(item);
+            });
+            syncSelectionBadges();
+        }
+
+        function syncSelectionBadges() {
+            // Badge shows each list's saved checkbox count (survives switching radios)
+            printGroups.forEach(pg => {
+                const label = document.querySelector(`label[for="pg-${pg.id}"]`);
+                if (!label) return;
+                const key = pgKey(pg.id);
+                const ids = (selectedPrintGroup === pg.id)
+                    ? selectedDocuments
+                    : (selectionsByPg[key] || []);
+                const count = ids.length;
+                label.innerHTML = count
+                    ? `${escapeHtml(pg.name)} <span class="pg-selected-badge">${count} selected</span>`
+                    : escapeHtml(pg.name);
+            });
+        }
+
+        async function selectPrintGroup(printGroupId) {
+            // Keep previous list's checks/templates when switching away
+            saveActivePrintGroupState();
+
+            selectedPrintGroup = printGroupId;
+            document.getElementById('custom-doc-toolbar').style.display = 'flex';
+            document.getElementById('custom-document-print-group-id').value = printGroupId;
+            // Keep form closed until user clicks the button
+            const section = document.getElementById('custom-document-section');
+            const btn = document.getElementById('toggle-custom-doc');
+            section.classList.remove('open');
+            btn.classList.remove('open');
+            btn.textContent = 'Add Custom Document to Selected Print Group';
+
+            // Restore this list's previous checks (or empty if never chosen)
+            loadPrintGroupState(printGroupId);
+
+            const searchInput = document.getElementById('documents-search');
+            if (searchInput) {
+                searchInput.disabled = false;
+                searchInput.value = '';
+            }
+            
+            try {
+                const response = await fetch(withLocationQuery(`/api/documents/?request_id=${requestId}&print_group_id=${printGroupId}`));
+                const data = await response.json();
+                documents = data.documents;
+                
+                renderDocuments();
+                syncSelectionBadges();
+            } catch (error) {
+                console.error('Error loading documents:', error);
+            }
+        }
+
+        function templateNameById(id) {
+            const t = templates.find(x => String(x.id) === String(id));
+            return t ? t.name : '';
+        }
+
+        function closeAllSearchable() {
+            document.querySelectorAll('.ss-panel.open').forEach(function (p) {
+                p.classList.remove('open');
+            });
+            document.querySelectorAll('.ss-trigger.open').forEach(function (t) {
+                t.classList.remove('open');
+            });
+        }
+
+        document.addEventListener('click', closeAllSearchable);
+
+        function buildSearchableSelect(docId, selectedId) {
+            const wrap = document.createElement('div');
+            wrap.className = 'ss';
+
+            const label = selectedId ? templateNameById(selectedId) : '';
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'ss-trigger' + (label ? '' : ' empty');
+            trigger.textContent = label || (templates.length ? 'Select template…' : 'No templates uploaded');
+
+            const panel = document.createElement('div');
+            panel.className = 'ss-panel';
+
+            const search = document.createElement('input');
+            search.type = 'text';
+            search.className = 'ss-search';
+            search.placeholder = 'Search templates...';
+
+            const list = document.createElement('ul');
+            list.className = 'ss-options';
+
+            function renderOptions(q) {
+                list.innerHTML = '';
+                const query = (q || '').toLowerCase().trim();
+                const filtered = templates.filter(function (t) {
+                    return !query || String(t.name || '').toLowerCase().includes(query);
+                });
+                if (!templates.length) {
+                    const li = document.createElement('li');
+                    li.className = 'muted';
+                    li.textContent = 'No templates — upload in Catalog Admin';
+                    list.appendChild(li);
+                    return;
+                }
+                if (!filtered.length) {
+                    const li = document.createElement('li');
+                    li.className = 'muted';
+                    li.textContent = 'No matches';
+                    list.appendChild(li);
+                    return;
+                }
+                filtered.forEach(function (t) {
+                    const li = document.createElement('li');
+                    li.textContent = t.name;
+                    if (String(t.id) === String(selectedTemplates[docId] || '')) {
+                        li.classList.add('active');
+                    }
+                    li.addEventListener('click', function () {
+                        setDocumentTemplate(docId, t.id);
+                        trigger.textContent = t.name;
+                        trigger.classList.remove('empty');
+                        closeAllSearchable();
+                    });
+                    list.appendChild(li);
+                });
+            }
+
+            search.addEventListener('input', function () {
+                renderOptions(search.value);
+            });
+
+            trigger.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const willOpen = !panel.classList.contains('open');
+                closeAllSearchable();
+                if (willOpen) {
+                    panel.classList.add('open');
+                    trigger.classList.add('open');
+                    search.value = '';
+                    renderOptions('');
+                    setTimeout(function () { search.focus(); }, 0);
+                }
+            });
+
+            panel.addEventListener('click', function (e) { e.stopPropagation(); });
+            panel.appendChild(search);
+            panel.appendChild(list);
+            wrap.appendChild(trigger);
+            wrap.appendChild(panel);
+            return wrap;
+        }
+
+        function toggleCustomDocForm() {
+            if (!selectedPrintGroup) {
+                showAlert('Please select a need list first', 'error');
+                return;
+            }
+            const section = document.getElementById('custom-document-section');
+            const btn = document.getElementById('toggle-custom-doc');
+            const open = !section.classList.contains('open');
+            section.classList.toggle('open', open);
+            btn.classList.toggle('open', open);
+            btn.textContent = open
+                ? 'Hide Custom Document Form'
+                : 'Add Custom Document to Selected Print Group';
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>"']/g, function (c) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+            });
+        }
+
+        function getFilteredDocuments() {
+            const searchInput = document.getElementById('documents-search');
+            const q = ((searchInput && searchInput.value) || '').toLowerCase().trim();
+            if (!q) return documents.slice();
+            return documents.filter(function (doc) {
+                const name = String(doc.name || '').toLowerCase();
+                const desc = String(doc.description || '').toLowerCase();
+                const cat = String((doc.category && doc.category.name) || '').toLowerCase();
+                return name.includes(q) || desc.includes(q) || cat.includes(q);
+            });
+        }
+
+        function renderDocuments() {
+            const container = document.getElementById('documents-list');
+            
+            if (documents.length === 0) {
+                container.innerHTML = '<div class="empty-state">No documents in this need list</div>';
+                return;
+            }
+
+            const filtered = getFilteredDocuments();
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state">No documents match your search</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="checkbox-item select-all">
+                    <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                    <label for="select-all">Select All${filtered.length < documents.length ? ` (shown)` : ''}</label>
+                </div>
+            `;
+
+            filtered.forEach(doc => {
+                const isSelected = selectedDocuments.includes(doc.id);
+                const tplId = selectedTemplates[doc.id] || '';
+                const item = document.createElement('div');
+                item.className = 'checkbox-item';
+
+                const row = document.createElement('div');
+                row.className = 'doc-row';
+
+                const main = document.createElement('div');
+                main.className = 'doc-row-main';
+                main.innerHTML = `
+                    <input type="checkbox" id="doc-${doc.id}" value="${doc.id}" ${isSelected ? 'checked' : ''} onchange="toggleDocument(${doc.id})">
+                    <label for="doc-${doc.id}">${escapeHtml(doc.name)}</label>
+                `;
+                row.appendChild(main);
+
+                const tplWrap = document.createElement('div');
+                tplWrap.className = 'template-pick' + (isSelected ? ' show' : '');
+                tplWrap.id = `tpl-wrap-${doc.id}`;
+                const lbl = document.createElement('label');
+                lbl.innerHTML = 'Template <span class="hint-req">Required</span>';
+                tplWrap.appendChild(lbl);
+                tplWrap.appendChild(buildSearchableSelect(doc.id, tplId));
+                row.appendChild(tplWrap);
+
+                item.appendChild(row);
+                container.appendChild(item);
+            });
+            
+            // Select-all reflects currently visible docs only
+            const allChecked = filtered.length > 0 && filtered.every(doc => selectedDocuments.includes(doc.id));
+            document.getElementById('select-all').checked = allChecked;
+        }
+
+        function setDocumentTemplate(docId, templateId) {
+            if (!templateId) {
+                delete selectedTemplates[docId];
+            } else {
+                selectedTemplates[docId] = parseInt(templateId, 10);
+            }
+            saveActivePrintGroupState();
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('#documents-list input[type="checkbox"]:not(#select-all)');
+            
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+                const docId = parseInt(cb.value);
+                if (selectAll.checked) {
+                    if (!selectedDocuments.includes(docId)) {
+                        selectedDocuments.push(docId);
+                    }
+                    const wrap = document.getElementById(`tpl-wrap-${docId}`);
+                    if (wrap) wrap.classList.add('show');
+                } else {
+                    selectedDocuments = selectedDocuments.filter(id => id !== docId);
+                    delete selectedTemplates[docId];
+                    const wrap = document.getElementById(`tpl-wrap-${docId}`);
+                    if (wrap) wrap.classList.remove('show');
+                }
+            });
+            saveActivePrintGroupState();
+            syncSelectionBadges();
+        }
+
+        function toggleDocument(docId) {
+            const checkbox = document.getElementById(`doc-${docId}`);
+            const wrap = document.getElementById(`tpl-wrap-${docId}`);
+            if (checkbox.checked) {
+                if (!selectedDocuments.includes(docId)) {
+                    selectedDocuments.push(docId);
+                }
+                if (wrap) wrap.classList.add('show');
+            } else {
+                selectedDocuments = selectedDocuments.filter(id => id !== docId);
+                delete selectedTemplates[docId];
+                if (wrap) wrap.classList.remove('show');
+                document.getElementById('select-all').checked = false;
+            }
+            saveActivePrintGroupState();
+            syncSelectionBadges();
+        }
+
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        async function sendRequest() {
+            if (!selectedPrintGroup) {
+                showAlert('Please select a need list', 'error');
+                return;
+            }
+            if (selectedDocuments.length === 0) {
+                showAlert('Please select at least one document', 'error');
+                return;
+            }
+            if (!templates.length) {
+                showAlert('No templates available. Upload templates in Catalog Admin first.', 'error');
+                return;
+            }
+            const missing = selectedDocuments.filter(function (id) {
+                return !selectedTemplates[id];
+            });
+            if (missing.length) {
+                showAlert('Please choose a template file for every selected document before sending.', 'error');
+                return;
+            }
+
+            const sendBtn = document.querySelector('.btn-send');
+            setButtonLoading(sendBtn, true);
+
+            const templatesPayload = {};
+            selectedDocuments.forEach(function (id) {
+                templatesPayload[String(id)] = selectedTemplates[id];
+            });
+
+            const payload = {
+                section_type: 'needs_list',
+                document_ids: selectedDocuments,
+                print_group_id: selectedPrintGroup,
+                templates: templatesPayload
+            };
+
+            try {
+                const response = await fetch(withLocationQuery(`/api/${requestId}/admin/selections/`), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(withLocationJsonBody(payload))
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showAlert(`Successfully saved ${result.count} document(s)!`, 'success');
+                    setTimeout(() => {
+                        window.location.href = preserveQueryHref(`/${requestId}/request/admin/`);
+                    }, 2000);
+                } else {
+                    showAlert(result.error || 'Error saving selections', 'error');
+                }
+            } catch (error) {
+                showAlert('Error saving selections', 'error');
+                console.error('Error:', error);
+            } finally {
+                setButtonLoading(sendBtn, false);
+            }
+        }
+
+        // Handle custom document form submission
+        document.getElementById('custom-document-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = this.querySelector('button[type="submit"]');
+            
+            const printGroupId = document.getElementById('custom-document-print-group-id').value;
+            if (!printGroupId) {
+                showAlert('Please select a print group first', 'error');
+                return;
+            }
+            
+            const formData = {
+                name: document.getElementById('custom-document-name').value.trim(),
+                description: document.getElementById('custom-document-description').value.trim(),
+                category_id: parseInt(document.getElementById('custom-document-category').value),
+                print_group_id: parseInt(printGroupId)
+            };
+            
+            if (!formData.name || !formData.description || !formData.category_id || !formData.print_group_id) {
+                showAlert('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            setButtonLoading(submitBtn, true);
+            try {
+                const response = await fetch(withLocationQuery(`/api/${requestId}/admin/needs-list/document/create/`), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(withLocationJsonBody(formData))
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('Custom document created successfully!', 'success');
+                    // Add to documents and selected documents, then reload
+                    const newDoc = {
+                        id: result.document.id,
+                        name: result.document.name,
+                        description: result.document.description,
+                        category: {
+                            id: result.document.category.id,
+                            name: result.document.category.name
+                        }
+                    };
+                    documents.push(newDoc);
+                    selectedDocuments.push(newDoc.id);
+                    saveActivePrintGroupState();
+                    renderDocuments();
+                    syncSelectionBadges();
+                    // Reset form
+                    document.getElementById('custom-document-form').reset();
+                } else {
+                    showAlert(result.error || 'Error creating custom document', 'error');
+                }
+            } catch (error) {
+                showAlert('Error creating custom document', 'error');
+                console.error('Error:', error);
+            } finally {
+                setButtonLoading(submitBtn, false);
+            }
+        });
+
+        // Load print groups on page load
+        document.getElementById('documents-search').addEventListener('input', function () {
+            if (!selectedPrintGroup) return;
+            renderDocuments();
+        });
+        loadTemplates().then(function () { return loadPrintGroups(); });
+    </script>
+</body>
+</html>
+

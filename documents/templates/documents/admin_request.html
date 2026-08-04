@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Request Documents</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fc 0%, #e3f2fd 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2196f3 0%, #42a5f5 50%, #2196f3 100%);
+        }
+
+        .header {
+            padding: 30px;
+            border-bottom: 1px solid #e3f2fd;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #1565c0;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .header .request-id {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+            font-family: monospace;
+        }
+
+        .sections-container {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            border: 2px solid #e3f2fd;
+            border-radius: 12px;
+            padding: 24px;
+            background: #fafafa;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1565c0;
+        }
+
+        .section-status {
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .section-status.saved {
+            background: #bbdefb;
+        }
+
+        .filters {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .documents-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .documents-column {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            background: white;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .column-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e3f2fd;
+        }
+
+        .document-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .document-item:hover {
+            border-color: #2196f3;
+            background: #f0f7fc;
+        }
+
+        .document-item.selected {
+            border-color: #2196f3;
+            background: #e3f2fd;
+        }
+
+        .document-item .doc-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .document-item .doc-category {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .needs-list-selector {
+            margin-bottom: 20px;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .radio-item:hover {
+            background: #f0f7fc;
+        }
+
+        .radio-item input[type="radio"] {
+            margin-right: 10px;
+            accent-color: #2196f3;
+        }
+
+        .footer {
+            padding: 20px 30px;
+            border-top: 1px solid #e3f2fd;
+            background: #fafafa;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn-save:hover {
+            background: linear-gradient(135deg, #43a047 0%, #2196f3 100%);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-loading { pointer-events: none; opacity: 0.85; cursor: not-allowed; }
+        .btn-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+        @keyframes btn-spin { to { transform: rotate(360deg); } }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Admin - Request Documents</h1>
+            <div class="subtitle">Select documents for each section</div>
+            <div class="request-id">Request ID: {{ request_id }}</div>
+        </div>
+
+        <div class="sections-container">
+            <!-- Individual Documents Section -->
+            <div class="section" id="individual-section">
+                <div class="section-header">
+                    <div class="section-title">Individual Documents</div>
+                    <div class="section-status" id="individual-status">Not saved</div>
+                </div>
+                <div id="individual-alert"></div>
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Category</label>
+                        <select id="individual-category">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Search</label>
+                        <input type="text" id="individual-search" placeholder="Search documents...">
+                    </div>
+                </div>
+                <div class="documents-container">
+                    <div class="documents-column">
+                        <div class="column-header">Available Documents</div>
+                        <div id="individual-available" class="documents-list">
+                            <div class="empty-state">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="documents-column">
+                        <div class="column-header">Selected Documents</div>
+                        <div id="individual-selected" class="documents-list">
+                            <div class="empty-state">No documents selected</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; text-align: right;">
+                    <button class="btn btn-save" onclick="saveSection('individual')">Save Individual Selection</button>
+                </div>
+            </div>
+
+            <!-- Needs List Section -->
+            <div class="section" id="needs-list-section">
+                <div class="section-header">
+                    <div class="section-title">Needs List</div>
+                    <div class="section-status" id="needs-list-status">Not saved</div>
+                </div>
+                <div id="needs-list-alert"></div>
+                <div class="needs-list-selector">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Select a Need List:</label>
+                    <div class="radio-group" id="needs-list-options">
+                        <div class="empty-state">Loading...</div>
+                    </div>
+                </div>
+                <div class="filters" id="needs-list-filters" style="display: none;">
+                    <div class="filter-group">
+                        <label>Search</label>
+                        <input type="text" id="needs-list-search" placeholder="Search documents...">
+                    </div>
+                </div>
+                <div class="documents-container" id="needs-list-documents" style="display: none;">
+                    <div class="documents-column">
+                        <div class="column-header">Available Documents</div>
+                        <div id="needs-list-available" class="documents-list">
+                            <div class="empty-state">Select a need list first</div>
+                        </div>
+                    </div>
+                    <div class="documents-column">
+                        <div class="column-header">Selected Documents</div>
+                        <div id="needs-list-selected" class="documents-list">
+                            <div class="empty-state">No documents selected</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; text-align: right;">
+                    <button class="btn btn-save" onclick="saveSection('needs_list')" id="needs-list-save-btn" style="display: none;">Save Needs List Selection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'documents/ghl_location.js' %}"></script>
+    <script>
+        if (typeof withLocationQuery !== 'function') {
+            window.withLocationQuery = function(url) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id) return url;
+                return url + (url.includes('?') ? '&' : '?') + 'location_id=' + encodeURIComponent(id);
+            };
+        }
+        if (typeof withLocationJsonBody !== 'function') {
+            window.withLocationJsonBody = function(obj) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id || !obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+                return { ...obj, location_id: id };
+            };
+        }
+        if (typeof preserveQueryHref !== 'function') {
+            window.preserveQueryHref = function(path) {
+                return path + (window.location.search || '');
+            };
+        }
+    </script>
+    <script>
+        const requestId = '{{ request_id }}';
+        let allDocuments = [];
+        let allCategories = [];
+        let allPrintGroups = [];
+        let selectedPrintGroup = null;
+        
+        const sectionData = {
+            individual: { selected: [], available: [] },
+            needs_list: { selected: [], available: [] }
+        };
+
+        // Load initial data
+        async function loadInitialData() {
+            await Promise.all([
+                loadCategories(),
+                loadDocuments(),
+                loadPrintGroups()
+            ]);
+            renderAllSections();
+        }
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(withLocationQuery(`/api/categories/?request_id=${requestId}&include_empty=1`));
+                const data = await response.json();
+                allCategories = data.categories;
+                
+                // Populate category selects
+                const select = document.getElementById('individual-category');
+                if (select) {
+                    select.innerHTML = '<option value="">All</option>';
+                    allCategories.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat.id;
+                        option.textContent = cat.name;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
+        async function loadDocuments() {
+            try {
+                const response = await fetch(withLocationQuery(`/api/documents/?request_id=${requestId}`));
+                const data = await response.json();
+                allDocuments = data.documents;
+            } catch (error) {
+                console.error('Error loading documents:', error);
+            }
+        }
+
+        async function loadPrintGroups() {
+            try {
+                const response = await fetch(withLocationQuery(`/api/print-groups/?request_id=${requestId}`));
+                const data = await response.json();
+                allPrintGroups = data.print_groups;
+                renderPrintGroups();
+            } catch (error) {
+                console.error('Error loading print groups:', error);
+            }
+        }
+
+        function renderPrintGroups() {
+            const container = document.getElementById('needs-list-options');
+            container.innerHTML = '';
+            
+            allPrintGroups.forEach(pg => {
+                const item = document.createElement('div');
+                item.className = 'radio-item';
+                item.innerHTML = `
+                    <input type="radio" name="needs-list" id="pg-${pg.id}" value="${pg.id}" onchange="selectPrintGroup(${pg.id})">
+                    <label for="pg-${pg.id}">${pg.name}</label>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        async function selectPrintGroup(printGroupId) {
+            selectedPrintGroup = printGroupId;
+            try {
+                const response = await fetch(withLocationQuery(`/api/documents/?request_id=${requestId}&print_group_id=${printGroupId}`));
+                const data = await response.json();
+                sectionData.needs_list.available = data.documents;
+                sectionData.needs_list.selected = [];
+                
+                document.getElementById('needs-list-filters').style.display = 'flex';
+                document.getElementById('needs-list-documents').style.display = 'grid';
+                document.getElementById('needs-list-save-btn').style.display = 'block';
+                
+                renderSection('needs_list');
+            } catch (error) {
+                console.error('Error loading documents for print group:', error);
+            }
+        }
+
+        function renderAllSections() {
+            sectionData.individual.available = allDocuments;
+            renderSection('individual');
+        }
+
+        function renderSection(section) {
+            const data = sectionData[section];
+            const categoryFilter = document.getElementById(`${section}-category`)?.value || '';
+            const searchFilter = document.getElementById(`${section}-search`)?.value.toLowerCase() || '';
+            
+            let available = data.available.filter(doc => {
+                const matchesCategory = !categoryFilter || doc.category.id == categoryFilter;
+                const matchesSearch = !searchFilter || doc.name.toLowerCase().includes(searchFilter);
+                return matchesCategory && matchesSearch;
+            });
+
+            // Remove already selected
+            available = available.filter(doc => !data.selected.find(s => s.id === doc.id));
+
+            // Render available
+            const availableContainer = document.getElementById(`${section}-available`);
+            if (available.length === 0) {
+                availableContainer.innerHTML = '<div class="empty-state">No documents available</div>';
+            } else {
+                availableContainer.innerHTML = available.map(doc => `
+                    <div class="document-item" onclick="selectDocument('${section}', ${doc.id})">
+                        <div class="doc-name">${doc.name}</div>
+                        <div class="doc-category">${doc.category.name}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Render selected
+            const selectedContainer = document.getElementById(`${section}-selected`);
+            if (data.selected.length === 0) {
+                selectedContainer.innerHTML = '<div class="empty-state">No documents selected</div>';
+            } else {
+                selectedContainer.innerHTML = data.selected.map(doc => `
+                    <div class="document-item selected" onclick="deselectDocument('${section}', ${doc.id})">
+                        <div class="doc-name">${doc.name}</div>
+                        <div class="doc-category">${doc.category.name}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function selectDocument(section, docId) {
+            const data = sectionData[section];
+            const doc = data.available.find(d => d.id === docId);
+            if (doc && !data.selected.find(s => s.id === docId)) {
+                data.selected.push(doc);
+                renderSection(section);
+            }
+        }
+
+        function deselectDocument(section, docId) {
+            const data = sectionData[section];
+            data.selected = data.selected.filter(d => d.id !== docId);
+            renderSection(section);
+        }
+
+        function setButtonLoading(btn, loading) {
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.classList.add('btn-loading');
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="btn-spinner"></span> Saving...';
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+                btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+            }
+        }
+
+        async function saveSection(sectionType) {
+            const data = sectionData[sectionType];
+            if (data.selected.length === 0) {
+                showAlert(sectionType, 'Please select at least one document', 'error');
+                return;
+            }
+
+            if (sectionType === 'needs_list' && !selectedPrintGroup) {
+                showAlert(sectionType, 'Please select a need list first', 'error');
+                return;
+            }
+
+            const sectionId = sectionType === 'needs_list' ? 'needs-list-section' : sectionType + '-section';
+            const saveBtn = document.querySelector('#' + sectionId + ' .btn-save');
+            setButtonLoading(saveBtn, true);
+
+            const payload = {
+                section_type: sectionType,
+                document_ids: data.selected.map(d => d.id)
+            };
+
+            if (sectionType === 'needs_list') {
+                payload.print_group_id = selectedPrintGroup;
+            }
+
+            try {
+                const response = await fetch(withLocationQuery(`/api/${requestId}/admin/selections/`), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(withLocationJsonBody(payload))
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showAlert(sectionType, `Successfully saved ${result.count} document(s)!`, 'success');
+                    document.getElementById(`${sectionType}-status`).textContent = 'Saved';
+                    document.getElementById(`${sectionType}-status`).classList.add('saved');
+                } else {
+                    showAlert(sectionType, result.error || 'Error saving selections', 'error');
+                }
+            } catch (error) {
+                showAlert(sectionType, 'Error saving selections', 'error');
+                console.error('Error:', error);
+            } finally {
+                setButtonLoading(saveBtn, false);
+            }
+        }
+
+        function showAlert(section, message, type) {
+            const container = document.getElementById(`${section}-alert`);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        // Add event listeners for filters
+        document.getElementById('individual-category').addEventListener('change', () => renderSection('individual'));
+        document.getElementById('individual-search').addEventListener('input', () => renderSection('individual'));
+
+        document.getElementById('needs-list-search')?.addEventListener('input', () => renderSection('needs_list'));
+
+        // Load data on page load
+        loadInitialData();
+    </script>
+</body>
+</html>
+

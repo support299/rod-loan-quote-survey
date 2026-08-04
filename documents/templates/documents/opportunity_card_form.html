@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loan Quote Survey Form</title>
+    <style>
+        :root {
+            --primary: #1565c0;
+            --primary-light: #1565c0;
+            --accent: #2196f3;
+            --accent-soft: #bbdefb;
+            --bg-gradient-start: #e8f4fc;
+            --bg-gradient-end: #e3f2fd;
+            --section-border: #d6eaf8;
+            --section-bg: #f7fbff;
+            --text: #1a1a1a;
+            --text-muted: #5a5a5a;
+            --input-border: #90caf9;
+            --shadow: 0 4px 20px rgba(21, 101, 192, 0.08);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --nav-bar: #1565c0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(160deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            color: var(--text);
+            padding: 32px 20px 48px;
+            line-height: 1.5;
+        }
+
+        .page-container { max-width: 820px; margin: 0 auto; }
+
+        .form-card {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .form-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+        }
+
+        .form-header {
+            padding: 36px 40px 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--section-border);
+            background: linear-gradient(180deg, #fff 0%, var(--section-bg) 100%);
+        }
+
+        .form-header h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+
+        .form-header p { font-size: 14px; color: var(--text-muted); }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #cfd8d4;
+        }
+
+        .step-dot.active { background: var(--primary); }
+
+        .form-body { padding: 28px 40px 0; }
+
+        .form-step { display: none; }
+        .form-step.active { display: block; }
+
+        .section {
+            margin-bottom: 28px;
+            border: 1px solid var(--section-border);
+            border-radius: var(--radius);
+            background: var(--section-bg);
+            overflow: hidden;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 16px 20px;
+            background: linear-gradient(90deg, rgba(33, 150, 243, 0.12) 0%, transparent 100%);
+            border-bottom: 1px solid var(--section-border);
+        }
+
+        .section-fields {
+            padding: 20px 20px 24px;
+            display: grid;
+            gap: 18px;
+            grid-template-columns: 1fr;
+        }
+
+        .field-full { grid-column: 1 / -1; }
+
+        .field-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .field-group label .required { color: #c62828; }
+
+        .field-group input[type="text"],
+        .field-group input[type="number"],
+        .field-group input[type="date"],
+        .field-group select,
+        .field-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--input-border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-family: inherit;
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-height: 42px;
+        }
+
+        .field-group input:focus,
+        .field-group select:focus,
+        .field-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.15);
+        }
+
+        .radio-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .radio-option input { accent-color: var(--primary); }
+
+        .consent-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 14px;
+            background: #fff;
+            border: 1px solid var(--section-border);
+            border-radius: var(--radius-sm);
+        }
+
+        .consent-row input { margin-top: 3px; accent-color: var(--primary); }
+        .consent-row label { font-size: 13px; font-weight: 400; color: var(--text-muted); line-height: 1.45; }
+
+        .conditional-field {
+            overflow: hidden;
+            transition: opacity 0.25s ease, max-height 0.3s ease;
+        }
+
+        .conditional-field.hidden {
+            opacity: 0;
+            max-height: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            visibility: hidden;
+        }
+
+        .step-nav {
+            margin: 28px -40px 0;
+            padding: 16px 40px;
+            background: var(--nav-bar);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-nav {
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.45);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .btn-nav:hover { background: rgba(255,255,255,0.12); }
+
+        .btn-nav.primary {
+            background: #fff;
+            color: var(--primary);
+            border-color: #fff;
+        }
+
+        .btn-nav:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-nav.btn-loading { pointer-events: none; opacity: 0.85; }
+        .btn-spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(21,101,192,0.25);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: btn-spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes btn-spin { to { transform: rotate(360deg); } }
+
+        .success-message {
+            margin: 0 40px 20px;
+            padding: 14px 18px;
+            background: #e3f2fd;
+            border: 1px solid var(--accent);
+            border-radius: var(--radius-sm);
+            color: var(--primary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .field-error { border-color: #c62828 !important; }
+
+        @media (max-width: 640px) {
+            body { padding: 16px 12px 32px; }
+            .form-header, .form-body { padding-left: 20px; padding-right: 20px; }
+            .step-nav { margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; }
+        }
+    </style>
+</head>
+<body>
+    {% if initial %}
+    {{ initial|json_script:"initial-form-data" }}
+    {% endif %}
+    <div class="page-container">
+        <div class="form-card">
+            <div class="form-header">
+                <h1>Loan Quote Survey Form</h1>
+                <p>Step <span id="step-label">1</span> of 3 — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
+                <div class="step-indicator" aria-hidden="true">
+                    <span class="step-dot active" data-step="1"></span>
+                    <span class="step-dot" data-step="2"></span>
+                    <span class="step-dot" data-step="3"></span>
+                </div>
+            </div>
+
+            {% if success %}
+            <div class="success-message" role="alert">{{ message }}</div>
+            {% endif %}
+
+            <form id="opportunity-form" class="form-body" method="post" action="" novalidate>
+                {% csrf_token %}
+                {% if location_id %}
+                <input type="hidden" name="location_id" value="{{ location_id }}">
+                {% endif %}
+
+                <!-- Step 1 (image Slide 2) -->
+                <div class="form-step active" data-step="1">
+                    <section class="section">
+                        <h2 class="section-title">Applicant Info</h2>
+                        <div class="section-fields">
+                            <div class="field-group field-full">
+                                <label for="entity_name">Entity Name <span class="required">*</span></label>
+                                <input type="text" id="entity_name" name="entity_name" placeholder="Organization" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label>Are you a Broker or Direct Borrower? <span class="required">*</span></label>
+                                <div class="radio-row">
+                                    <label class="radio-option"><input type="radio" name="broker_or_borrower" value="Broker" required> Broker</label>
+                                    <label class="radio-option"><input type="radio" name="broker_or_borrower" value="Direct Borrower"> Direct Borrower</label>
+                                </div>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="account_executive">Account Executive <span class="required">*</span></label>
+                                <select id="account_executive" name="account_executive" required>
+                                    <option value="">Preferred AE to handle your deal</option>
+                                    <option value="N/A">N/A</option>
+                                    <option value="Anna">Anna</option>
+                                    <option value="Adel">Adel</option>
+                                    <option value="Rod">Rod</option>
+                                    <option value="Howard">Howard</option>
+                                    <option value="Marvin">Marvin</option>
+                                    <option value="Ashley">Ashley</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="fico_score">FICO Score <span class="required">*</span></label>
+                                <input type="text" id="fico_score" name="fico_score" placeholder="FICO Score" required>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Step 2 (image Slide 3) -->
+                <div class="form-step" data-step="2">
+                    <section class="section">
+                        <h2 class="section-title">Borrower Experience</h2>
+                        <div class="section-fields">
+                            <div class="field-group field-full">
+                                <label for="fix_and_hold_properties">Fix-and-Hold properties currently generating income (past 36 months) <span class="required">*</span></label>
+                                <input type="text" id="fix_and_hold_properties" name="fix_and_hold_properties" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="fix_and_flip_properties">Fix-and-Flip properties sold (past 36 months) <span class="required">*</span></label>
+                                <input type="text" id="fix_and_flip_properties" name="fix_and_flip_properties" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="residential_ground_up_projects">Residential Ground-up projects sold (past 36 months) <span class="required">*</span></label>
+                                <input type="text" id="residential_ground_up_projects" name="residential_ground_up_projects" required>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Step 3 (image Slide 4) -->
+                <div class="form-step" data-step="3">
+                    <section class="section">
+                        <h2 class="section-title">Loan Info</h2>
+                        <div class="section-fields">
+                            <div class="field-group field-full">
+                                <label for="subject_property_address">Subject Property Address <span class="required">*</span></label>
+                                <input type="text" id="subject_property_address" name="subject_property_address" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="loan_type">Loan Type <span class="required">*</span></label>
+                                <select id="loan_type" name="loan_type" required>
+                                    <option value="">Select</option>
+                                    <option value="FIX & FLIP">FIX & FLIP</option>
+                                    <option value="DSCR">DSCR</option>
+                                    <option value="BRIDGE">BRIDGE</option>
+                                    <option value="GROUND-UP CONSTRUCTION">GROUND-UP CONSTRUCTION</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_dscr_loan_type" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="dscr_loan_type">DSCR Loan Type <span class="required">*</span></label>
+                                <select id="dscr_loan_type" name="dscr_loan_type">
+                                    <option value="">Select</option>
+                                    <option value="DSCR Purchase">DSCR Purchase</option>
+                                    <option value="DSCR Refinance">DSCR Refinance</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="property_type">Property Type <span class="required">*</span></label>
+                                <select id="property_type" name="property_type" required>
+                                    <option value="">Select</option>
+                                    <option value="SFH">SFH</option>
+                                    <option value="Townhome">Townhome</option>
+                                    <option value="2-4 units">2-4 units</option>
+                                    <option value="5+ Units">5+ Units</option>
+                                    <option value="Multifamily">Multifamily</option>
+                                    <option value="Mixed Use">Mixed Use</option>
+                                    <option value="Commercial">Commercial</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="units_residential">How many units are Residential? <span class="required">*</span></label>
+                                <input type="text" id="units_residential" name="units_residential" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="units_commercial">How many units are Commercial? <span class="required">*</span></label>
+                                <input type="text" id="units_commercial" name="units_commercial" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="number_of_units">Number of Units <span class="required">*</span></label>
+                                <input type="text" id="number_of_units" name="number_of_units" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="total_number_of_units">Total Number of Units <span class="required">*</span></label>
+                                <input type="text" id="total_number_of_units" name="total_number_of_units" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="residential_sqft_51_percent">Is Residential Square footage at least 51% of the property sq footage? <span class="required">*</span></label>
+                                <input type="text" id="residential_sqft_51_percent" name="residential_sqft_51_percent" required>
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_commercial_property_type" data-show-when="property_type" data-show-values="Commercial,Mixed Use">
+                                <label for="commercial_property_type">Commercial Property Type <span class="required">*</span></label>
+                                <select id="commercial_property_type" name="commercial_property_type">
+                                    <option value="">Select</option>
+                                    <option value="Hotel">Hotel</option>
+                                    <option value="Restaurant">Restaurant</option>
+                                    <option value="Office">Office</option>
+                                    <option value="Warehouse">Warehouse</option>
+                                    <option value="Others">Others</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_please_specify" data-show-when="commercial_property_type" data-show-values="Others">
+                                <label for="please_specify">Please Specify <span class="required">*</span></label>
+                                <input type="text" id="please_specify" name="please_specify">
+                            </div>
+                            <div class="field-group field-full">
+                                <label>Lot Owned? <span class="required">*</span></label>
+                                <div class="radio-row">
+                                    <label class="radio-option"><input type="radio" name="lot_owned" value="Yes" required> Yes</label>
+                                    <label class="radio-option"><input type="radio" name="lot_owned" value="No"> No</label>
+                                </div>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="payoff">Payoff <span class="required">*</span></label>
+                                <input type="text" id="payoff" name="payoff" required>
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_bridge_loan_type" data-show-when="loan_type" data-show-values="BRIDGE">
+                                <label for="bridge_loan_type">Bridge Loan Type <span class="required">*</span></label>
+                                <select id="bridge_loan_type" name="bridge_loan_type">
+                                    <option value="">Select</option>
+                                    <option value="Purchase Bridge">Purchase Bridge</option>
+                                    <option value="Refi Bridge">Refi Bridge</option>
+                                    <option value="Refi-Rehab">Refi-Rehab</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="purchase_price_original_if_refi">Purchase Price (Original Purchase Price if Refi) <span class="required">*</span></label>
+                                <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="original_purchase_price">Original Purchase Price <span class="required">*</span></label>
+                                <input type="text" id="original_purchase_price" name="original_purchase_price" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="original_purchase_date">Original Purchase Date <span class="required">*</span></label>
+                                <input type="date" id="original_purchase_date" name="original_purchase_date" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="purchase_price">Purchase Price <span class="required">*</span></label>
+                                <input type="text" id="purchase_price" name="purchase_price" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="rehab_budget">Rehab Budget <span class="required">*</span></label>
+                                <input type="text" id="rehab_budget" name="rehab_budget" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="original_acquisition_cost">Original Acquisition Cost <span class="required">*</span></label>
+                                <input type="text" id="original_acquisition_cost" name="original_acquisition_cost" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="original_acquisition_date">Original Acquisition Date <span class="required">*</span></label>
+                                <input type="date" id="original_acquisition_date" name="original_acquisition_date" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="arv">ARV (After Repair Value) <span class="required">*</span></label>
+                                <input type="text" id="arv" name="arv" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="estimated_property_value">Estimated Property Value <span class="required">*</span></label>
+                                <input type="text" id="estimated_property_value" name="estimated_property_value" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="annual_insurance">Annual Insurance <span class="required">*</span></label>
+                                <input type="text" id="annual_insurance" name="annual_insurance" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="annual_tax">Annual Tax <span class="required">*</span></label>
+                                <input type="text" id="annual_tax" name="annual_tax" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="monthly_rent">Monthly Rent <span class="required">*</span></label>
+                                <input type="text" id="monthly_rent" name="monthly_rent" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="existing_mortgage">Existing Mortgage (put N/A if Purchase) <span class="required">*</span></label>
+                                <input type="text" id="existing_mortgage" name="existing_mortgage" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="exit_strategy">Exit Strategy <span class="required">*</span></label>
+                                <input type="text" id="exit_strategy" name="exit_strategy" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="current_property_value">Current Property Value <span class="required">*</span></label>
+                                <input type="text" id="current_property_value" name="current_property_value" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="as_is_value">As-Is Value <span class="required">*</span></label>
+                                <input type="text" id="as_is_value" name="as_is_value" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="construction_budget">Construction Budget <span class="required">*</span></label>
+                                <input type="text" id="construction_budget" name="construction_budget" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="final_value">Final Value <span class="required">*</span></label>
+                                <input type="text" id="final_value" name="final_value" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="occupancy">Occupancy <span class="required">*</span></label>
+                                <select id="occupancy" name="occupancy" required>
+                                    <option value="">Select</option>
+                                    <option value="Leased">Leased</option>
+                                    <option value="Vacant">Vacant</option>
+                                    <option value="Owner Occupied">Owner Occupied</option>
+                                    <option value="Partially Leased">Partially Leased</option>
+                                </select>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="units_leased">How many units are leased? <span class="required">*</span></label>
+                                <input type="text" id="units_leased" name="units_leased" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="zoning_permit_status">Zoning & Permit Status <span class="required">*</span></label>
+                                <input type="text" id="zoning_permit_status" name="zoning_permit_status" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="lot_purchase_price">Lot Purchase Price <span class="required">*</span></label>
+                                <input type="text" id="lot_purchase_price" name="lot_purchase_price" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="intended_exit">Intended Exit (Sale, Refi) <span class="required">*</span></label>
+                                <input type="text" id="intended_exit" name="intended_exit" required>
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="existing_loan_balance">Existing Loan Balance (N/A if Purchase Bridge)</label>
+                                <input type="text" id="existing_loan_balance" name="existing_loan_balance">
+                            </div>
+                            <div class="field-group field-full">
+                                <div class="consent-row">
+                                    <input type="checkbox" id="sms_consent" name="sms_consent" value="Yes">
+                                    <label for="sms_consent">I Consent to Receive SMS Notifications, Alerts &amp; Occasional Marketing Communication from company. Message frequency varies. Message &amp; data rates may apply. Text HELP for assistance. You can reply STOP to unsubscribe at any time.</label>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="step-nav">
+                    <button type="button" class="btn-nav" id="btn-prev" disabled>&larr; PREV</button>
+                    <button type="button" class="btn-nav primary" id="btn-next">NEXT &rarr;</button>
+                    <button type="submit" class="btn-nav primary" id="btn-submit" style="display:none;">SUBMIT</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var form = document.getElementById('opportunity-form');
+            var currentStep = 1;
+            var totalSteps = 3;
+
+            function getTriggerValue(fieldName) {
+                var el = form.querySelector('[name="' + fieldName + '"]');
+                if (!el) return '';
+                if (el.type === 'radio') {
+                    var r = form.querySelector('[name="' + fieldName + '"]:checked');
+                    return r ? r.value : '';
+                }
+                return el.value || '';
+            }
+
+            function updateConditionalFields() {
+                form.querySelectorAll('.conditional-field').forEach(function(wrap) {
+                    var when = wrap.getAttribute('data-show-when');
+                    var values = (wrap.getAttribute('data-show-values') || '').split(',').map(function(s) { return s.trim(); });
+                    var current = getTriggerValue(when);
+                    var show = values.indexOf(current) !== -1;
+                    wrap.classList.toggle('hidden', !show);
+                    wrap.querySelectorAll('input, select, textarea').forEach(function(inp) {
+                        if (!show) {
+                            if (inp.type === 'radio' || inp.type === 'checkbox') inp.checked = false;
+                            else inp.value = '';
+                            inp.removeAttribute('required');
+                        } else if (wrap.querySelector('label .required')) {
+                            if (inp.type !== 'radio' && inp.type !== 'checkbox') inp.setAttribute('required', 'required');
+                        }
+                    });
+                });
+            }
+
+            function showStep(step) {
+                currentStep = step;
+                form.querySelectorAll('.form-step').forEach(function(el) {
+                    el.classList.toggle('active', parseInt(el.getAttribute('data-step'), 10) === step);
+                });
+                document.querySelectorAll('.step-dot').forEach(function(dot) {
+                    dot.classList.toggle('active', parseInt(dot.getAttribute('data-step'), 10) === step);
+                });
+                document.getElementById('step-label').textContent = String(step);
+                document.getElementById('btn-prev').disabled = step === 1;
+                document.getElementById('btn-next').style.display = step === totalSteps ? 'none' : '';
+                document.getElementById('btn-submit').style.display = step === totalSteps ? '' : 'none';
+                updateConditionalFields();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            function validateStep(step) {
+                var panel = form.querySelector('.form-step[data-step="' + step + '"]');
+                var ok = true;
+                var firstBad = null;
+                panel.querySelectorAll('[required]').forEach(function(el) {
+                    if (el.closest('.conditional-field.hidden')) return;
+                    var valid = true;
+                    if (el.type === 'radio') {
+                        var name = el.name;
+                        if (!form.querySelector('[name="' + name + '"]:checked')) valid = false;
+                    } else if (!el.value || !String(el.value).trim()) {
+                        valid = false;
+                    }
+                    el.classList.toggle('field-error', !valid && el.type !== 'radio');
+                    if (!valid) {
+                        ok = false;
+                        if (!firstBad) firstBad = el;
+                    }
+                });
+                // radio groups marked required
+                panel.querySelectorAll('input[type="radio"][required]').forEach(function(el) {
+                    var name = el.name;
+                    if (!form.querySelector('[name="' + name + '"]:checked')) {
+                        ok = false;
+                        if (!firstBad) firstBad = el;
+                    }
+                });
+                if (firstBad) firstBad.focus();
+                return ok;
+            }
+
+            document.getElementById('btn-next').addEventListener('click', function() {
+                if (!validateStep(currentStep)) return;
+                if (currentStep < totalSteps) showStep(currentStep + 1);
+            });
+
+            document.getElementById('btn-prev').addEventListener('click', function() {
+                if (currentStep > 1) showStep(currentStep - 1);
+            });
+
+            form.addEventListener('change', updateConditionalFields);
+            form.addEventListener('input', updateConditionalFields);
+
+            form.addEventListener('keydown', function(e) {
+                if (e.key !== 'Enter') return;
+                var tag = (e.target && e.target.tagName || '').toLowerCase();
+                // Allow Enter in textarea; block everywhere else so it does not submit.
+                if (tag === 'textarea') return;
+                e.preventDefault();
+                // On steps 1–2, Enter advances like NEXT when current step is valid.
+                if (currentStep < totalSteps && document.activeElement !== document.getElementById('btn-submit')) {
+                    if (validateStep(currentStep)) showStep(currentStep + 1);
+                }
+            });
+
+            form.addEventListener('submit', function(e) {
+                if (!validateStep(currentStep)) {
+                    e.preventDefault();
+                    return;
+                }
+                var btn = document.getElementById('btn-submit');
+                btn.classList.add('btn-loading');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="btn-spinner"></span>Submitting…';
+            });
+
+            // Prefill from initial data
+            var initialEl = document.getElementById('initial-form-data');
+            if (initialEl) {
+                try {
+                    var data = JSON.parse(initialEl.textContent);
+                    Object.keys(data).forEach(function(key) {
+                        var val = data[key];
+                        if (val === undefined || val === null) return;
+                        var radios = form.querySelectorAll('[name="' + key + '"][type="radio"]');
+                        if (radios.length) {
+                            radios.forEach(function(r) { r.checked = r.value === String(val); });
+                            return;
+                        }
+                        var checkbox = form.querySelector('[name="' + key + '"][type="checkbox"]');
+                        if (checkbox) {
+                            checkbox.checked = String(val) === 'Yes' || String(val) === 'true';
+                            return;
+                        }
+                        var el = form.querySelector('[name="' + key + '"]');
+                        if (el) el.value = val;
+                    });
+                } catch (err) {}
+            }
+
+            updateConditionalFields();
+            showStep(1);
+        })();
+    </script>
+</body>
+</html>

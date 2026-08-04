@@ -1,0 +1,29 @@
+<div class="uploaded-file {% if upload.accepted %}accepted{% elif upload.is_rejected %}rejected{% endif %}">
+    <div class="upload-main">
+        <div class="file-info">
+            <div class="file-icon">📎</div>
+            <div class="file-details">
+                <div class="file-name">{{ upload.file_name }}</div>
+                <div class="file-date">Uploaded: {{ upload.uploaded_at|date:"M d, Y H:i" }}</div>
+                {% if upload.accepted %}
+                <div class="file-status status-accepted">
+                    ✓ Accepted{% if upload.accepted_at %} on {{ upload.accepted_at|date:"M d, Y H:i" }}{% endif %}
+                </div>
+                {% elif upload.is_rejected %}
+                <div class="file-status status-rejected">Needs revision</div>
+                {% else %}
+                <div class="file-status status-pending">Pending Review</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="file-actions">
+            <a href="{{ upload.file_url }}" target="_blank" class="btn btn-view">View</a>
+        </div>
+    </div>
+    {% if upload.is_rejected and upload.rejection_reason %}
+    <div class="reject-note">
+        <div class="reject-note-label">Admin feedback</div>
+        <p class="reject-note-text">{{ upload.rejection_reason }}</p>
+    </div>
+    {% endif %}
+</div>

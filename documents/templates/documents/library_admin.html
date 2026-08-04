@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog Admin</title>
+    <style>
+        :root {
+            --primary: #1565c0;
+            --accent: #2196f3;
+            --border: #e0e0e0;
+            --bg: #e8f4fc;
+            --muted: #666;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fc 0%, #e3f2fd 100%);
+            min-height: 100vh;
+            padding: 24px 16px 48px;
+            color: #222;
+        }
+        .wrap { max-width: 960px; margin: 0 auto; }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 22px 28px;
+            border-bottom: 1px solid #e3f2fd;
+            background: linear-gradient(180deg, #fff, #f7fbff);
+        }
+        .header h1 { font-size: 22px; color: var(--primary); }
+        .header p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+        .btn {
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #2196f3, #42a5f5);
+            color: #fff;
+            border: none;
+        }
+        .btn-danger { color: #c62828; border-color: #ffcdd2; }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            padding: 16px 28px 0;
+            border-bottom: 1px solid #e3f2fd;
+        }
+        .tab {
+            padding: 10px 16px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--muted);
+            border-bottom: 3px solid transparent;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .tab.active { color: var(--primary); border-bottom-color: var(--accent); }
+        .panel { display: none; padding: 24px 28px 32px; }
+        .panel.active { display: block; }
+        .grid-form {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: 1fr 1fr;
+            background: #f8f9fa;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .grid-form .full { grid-column: 1 / -1; }
+        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        textarea { min-height: 70px; resize: vertical; }
+        .list { display: grid; gap: 8px; }
+        .item {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            background: #fff;
+        }
+        .item h4 { font-size: 14px; margin-bottom: 4px; }
+        .item p { font-size: 12px; color: var(--muted); }
+        .tag {
+            display: inline-block;
+            font-size: 11px;
+            background: #e3f2fd;
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-top: 6px;
+        }
+        .alert {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            display: none;
+        }
+        .alert.show { display: block; }
+        .alert.ok { background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; }
+        .alert.err { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
+        .hint { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+        .empty { text-align: center; color: #999; padding: 24px; }
+        .panel-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .panel-toolbar .hint { margin-bottom: 0; flex: 1; }
+        .btn-toggle-form {
+            background: #fff;
+            color: var(--primary);
+            border: 1px solid #90caf9;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .btn-toggle-form:hover,
+        .btn-toggle-form.open {
+            background: #e3f2fd;
+            border-color: var(--accent);
+        }
+        .collapsible-form {
+            display: none;
+            margin-bottom: 20px;
+        }
+        .collapsible-form.open { display: grid; }
+        @media (max-width: 700px) {
+            .grid-form { grid-template-columns: 1fr; }
+            .header { flex-direction: column; align-items: flex-start; }
+            .panel-toolbar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+    <script src="{% static 'documents/ghl_location.js' %}"></script>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="header">
+                <div>
+                    <h1>Catalog Admin</h1>
+                    <p>Add categories, documents, and needs-list groups for this location. They show on Individual Documents and Needs List.</p>
+                </div>
+                <button type="button" class="btn" onclick="window.location.href=preserveQueryHref('/{{ request_id }}/request/admin/')">← Back</button>
+            </div>
+
+            <div id="alert" class="alert"></div>
+
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="categories">Categories</button>
+                <button type="button" class="tab" data-tab="documents">Documents</button>
+                <button type="button" class="tab" data-tab="print-groups">Needs List Groups</button>
+                <button type="button" class="tab" data-tab="templates">Templates</button>
+            </div>
+
+            <div class="panel active" id="panel-categories">
+                <div class="panel-toolbar">
+                    <p class="hint">Categories group documents on the Individual Documents page.</p>
+                    <button type="button" class="btn-toggle-form" data-toggle="form-category" data-label="Add Category">Add Category</button>
+                </div>
+                <form class="grid-form collapsible-form" id="form-category">
+                    <div class="full">
+                        <label for="cat-name">Category name *</label>
+                        <input id="cat-name" name="name" required placeholder="e.g. Income Docs">
+                    </div>
+                    <div class="full">
+                        <label for="cat-desc">Description</label>
+                        <input id="cat-desc" name="description" placeholder="Optional">
+                    </div>
+                    <div class="full">
+                        <button type="submit" class="btn btn-primary">Add Category</button>
+                    </div>
+                </form>
+                <div class="list" id="list-categories"></div>
+            </div>
+
+            <div class="panel" id="panel-documents">
+                <div class="panel-toolbar">
+                    <p class="hint">Documents appear on Individual Documents. Optionally attach a Needs List group so they also show under Needs List.</p>
+                    <button type="button" class="btn-toggle-form" data-toggle="form-document" data-label="Add Document">Add Document</button>
+                </div>
+                <form class="grid-form collapsible-form" id="form-document">
+                    <div>
+                        <label for="doc-category">Category *</label>
+                        <select id="doc-category" name="category_id" required>
+                            <option value="">Select</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="doc-pg">Needs List group (optional)</label>
+                        <select id="doc-pg" name="print_group_id">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                    <div class="full">
+                        <label for="doc-name">Document name *</label>
+                        <input id="doc-name" name="name" required placeholder="e.g. Bank Statements">
+                    </div>
+                    <div class="full">
+                        <label for="doc-desc">Description *</label>
+                        <textarea id="doc-desc" name="description" required placeholder="What the borrower should upload"></textarea>
+                    </div>
+                    <div class="full">
+                        <button type="submit" class="btn btn-primary">Add Document</button>
+                    </div>
+                </form>
+                <div class="list" id="list-documents"></div>
+            </div>
+
+            <div class="panel" id="panel-print-groups">
+                <div class="panel-toolbar">
+                    <p class="hint">Needs List groups (print groups) are the parent lists on the Needs List page. Add documents and assign them to a group in the Documents tab.</p>
+                    <button type="button" class="btn-toggle-form" data-toggle="form-print-group" data-label="Add Needs List Group">Add Needs List Group</button>
+                </div>
+                <form class="grid-form collapsible-form" id="form-print-group">
+                    <div class="full">
+                        <label for="pg-name">Group name *</label>
+                        <input id="pg-name" name="name" required placeholder="e.g. Conventional Refinance">
+                    </div>
+                    <div class="full">
+                        <label for="pg-desc">Description</label>
+                        <input id="pg-desc" name="description" placeholder="Optional">
+                    </div>
+                    <div class="full">
+                        <button type="submit" class="btn btn-primary">Add Needs List Group</button>
+                    </div>
+                </form>
+                <div class="list" id="list-print-groups"></div>
+            </div>
+
+            <div class="panel" id="panel-templates">
+                <div class="panel-toolbar">
+                    <p class="hint">Blank/template files stored in GHL <strong>Needs List Templates</strong> folder. Admins must pick one per document when sending a Needs List or Individual Documents request. Borrowers can download them on the upload page.</p>
+                    <button type="button" class="btn-toggle-form" data-toggle="form-template" data-label="Upload Template">Upload Template</button>
+                </div>
+                <form class="grid-form collapsible-form" id="form-template">
+                    <div>
+                        <label for="tpl-name">Template name *</label>
+                        <input id="tpl-name" name="name" required placeholder="e.g. Bank Statement Blank">
+                    </div>
+                    <div>
+                        <label for="tpl-file">File *</label>
+                        <input id="tpl-file" name="file" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg">
+                    </div>
+                    <div class="full">
+                        <button type="submit" class="btn btn-primary">Upload Template</button>
+                    </div>
+                </form>
+                <div class="list" id="list-templates"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var requestId = "{{ request_id|escapejs }}";
+        var locationId = "{{ location_id|escapejs }}" || (typeof getGhlLocationId === 'function' ? getGhlLocationId() : '');
+
+        function showAlert(msg, ok) {
+            var el = document.getElementById('alert');
+            el.textContent = msg;
+            el.className = 'alert show ' + (ok ? 'ok' : 'err');
+            setTimeout(function () { el.classList.remove('show'); }, 4000);
+        }
+
+        function jsonBody(obj) {
+            var data = typeof withLocationJsonBody === 'function' ? withLocationJsonBody(obj) : Object.assign({}, obj);
+            if (locationId && !data.location_id) data.location_id = locationId;
+            return data;
+        }
+
+        async function api(url, opts) {
+            var res = await fetch(typeof withLocationQuery === 'function' ? withLocationQuery(url) : url, opts);
+            var data = {};
+            try { data = await res.json(); } catch (e) {}
+            if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+            return data;
+        }
+
+        document.querySelectorAll('.tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+                document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.getAttribute('data-tab')).classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.btn-toggle-form').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var formId = btn.getAttribute('data-toggle');
+                var form = document.getElementById(formId);
+                if (!form) return;
+                var open = !form.classList.contains('open');
+                form.classList.toggle('open', open);
+                btn.classList.toggle('open', open);
+                var label = btn.getAttribute('data-label') || 'Add';
+                btn.textContent = open ? 'Hide Form' : label;
+            });
+        });
+
+        function closeFormPanel(formId) {
+            var form = document.getElementById(formId);
+            if (!form) return;
+            form.classList.remove('open');
+            var btn = document.querySelector('.btn-toggle-form[data-toggle="' + formId + '"]');
+            if (btn) {
+                btn.classList.remove('open');
+                btn.textContent = btn.getAttribute('data-label') || 'Add';
+            }
+        }
+
+        async function loadCategories() {
+            // include_empty=1 so categories without docs still appear (location_id alone hides them)
+            var data = await api('/api/categories/?include_empty=1');
+            var list = document.getElementById('list-categories');
+            var sel = document.getElementById('doc-category');
+            list.innerHTML = '';
+            sel.innerHTML = '<option value="">Select</option>';
+            (data.categories || []).forEach(function (c) {
+                var item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML = '<div><h4>' + escapeHtml(c.name) + '</h4><p>' + escapeHtml(c.description || '') + '</p></div>';
+                list.appendChild(item);
+                var opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.name;
+                sel.appendChild(opt);
+            });
+            if (!(data.categories || []).length) {
+                list.innerHTML = '<div class="empty">No categories yet. Click Add Category to create one.</div>';
+            }
+        }
+
+        async function loadPrintGroups() {
+            if (!locationId) {
+                document.getElementById('list-print-groups').innerHTML = '<div class="empty">location_id missing in URL. Open this page with ?location_id=...</div>';
+                return;
+            }
+            var data = await api('/api/print-groups/');
+            var list = document.getElementById('list-print-groups');
+            var sel = document.getElementById('doc-pg');
+            list.innerHTML = '';
+            sel.innerHTML = '<option value="">None</option>';
+            (data.print_groups || []).forEach(function (pg) {
+                var item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML =
+                    '<div><h4>' + escapeHtml(pg.name) + '</h4><p>' + escapeHtml(pg.description || '') + '</p></div>' +
+                    '<button type="button" class="btn btn-danger" data-del-pg="' + pg.id + '">Delete</button>';
+                list.appendChild(item);
+                var opt = document.createElement('option');
+                opt.value = pg.id;
+                opt.textContent = pg.name;
+                sel.appendChild(opt);
+            });
+            if (!(data.print_groups || []).length) {
+                list.innerHTML = '<div class="empty">No needs-list groups yet. Click Add Needs List Group to create one.</div>';
+            }
+            list.querySelectorAll('[data-del-pg]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    if (!confirm('Delete this needs-list group?')) return;
+                    try {
+                        await api('/api/account/print-group-library/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(jsonBody({
+                                action: 'delete_owned',
+                                print_group_id: parseInt(btn.getAttribute('data-del-pg'), 10)
+                            }))
+                        });
+                        showAlert('Group deleted', true);
+                        await refreshAll();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
+        }
+
+        async function loadDocuments() {
+            if (!locationId) {
+                document.getElementById('list-documents').innerHTML = '<div class="empty">location_id missing in URL.</div>';
+                return;
+            }
+            var data = await api('/api/documents/');
+            var list = document.getElementById('list-documents');
+            list.innerHTML = '';
+            (data.documents || []).forEach(function (d) {
+                var pgs = (d.print_groups || []).map(function (p) { return p.name; }).join(', ');
+                var item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML =
+                    '<div><h4>' + escapeHtml(d.name) + '</h4><p>' + escapeHtml(d.description || '') + '</p>' +
+                    '<span class="tag">' + escapeHtml((d.category && d.category.name) || '') + '</span>' +
+                    (pgs ? ' <span class="tag">' + escapeHtml(pgs) + '</span>' : '') +
+                    '</div>' +
+                    '<button type="button" class="btn btn-danger" data-del-doc="' + d.id + '">Delete</button>';
+                list.appendChild(item);
+            });
+            if (!(data.documents || []).length) {
+                list.innerHTML = '<div class="empty">No documents yet. Click Add Document to create one.</div>';
+            }
+            list.querySelectorAll('[data-del-doc]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    if (!confirm('Delete this document from the catalog?')) return;
+                    try {
+                        await api('/api/account/document-library/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(jsonBody({
+                                action: 'delete_owned',
+                                document_id: parseInt(btn.getAttribute('data-del-doc'), 10)
+                            }))
+                        });
+                        showAlert('Document deleted', true);
+                        await loadDocuments();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
+        }
+
+        async function loadTemplates() {
+            if (!locationId) {
+                document.getElementById('list-templates').innerHTML = '<div class="empty">location_id missing in URL.</div>';
+                return;
+            }
+            var data = await api('/api/account/needs-list-templates/');
+            var list = document.getElementById('list-templates');
+            list.innerHTML = '';
+            if (!data.templates_parent_id) {
+                list.innerHTML = '<div class="empty">Templates folder not configured (templates_parent_id). Set it on this location’s GHL credentials.</div>';
+                return;
+            }
+            (data.templates || []).forEach(function (t) {
+                var item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML =
+                    '<div>' +
+                    '<h4>' + escapeHtml(t.name) + '</h4>' +
+                    '<p>' + escapeHtml(t.file_name || '') + '</p>' +
+                    (t.ghl_file_url ? '<a class="tag" href="' + escapeHtml(t.ghl_file_url) + '" target="_blank" rel="noopener">View / Download</a>' : '') +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                    '<button type="button" class="btn" data-edit-tpl="' + t.id + '" data-name="' + escapeHtml(t.name) + '">Edit</button>' +
+                    '<button type="button" class="btn btn-danger" data-del-tpl="' + t.id + '">Delete</button>' +
+                    '</div>';
+                list.appendChild(item);
+            });
+            if (!(data.templates || []).length) {
+                list.innerHTML = '<div class="empty">No templates yet. Click Upload Template to add one.</div>';
+            }
+            list.querySelectorAll('[data-del-tpl]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    if (!confirm('Delete this template?')) return;
+                    try {
+                        await api('/api/account/needs-list-templates/' + btn.getAttribute('data-del-tpl') + '/', {
+                            method: 'DELETE'
+                        });
+                        showAlert('Template deleted', true);
+                        await loadTemplates();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
+            list.querySelectorAll('[data-edit-tpl]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    var id = btn.getAttribute('data-edit-tpl');
+                    var current = btn.getAttribute('data-name') || '';
+                    var nextName = prompt('Template name', current);
+                    if (nextName === null) return;
+                    nextName = nextName.trim();
+                    if (!nextName) { showAlert('Name is required', false); return; }
+                    var replace = confirm('Replace the file too? OK = choose a new file, Cancel = rename only.');
+                    var fd = new FormData();
+                    fd.append('location_id', locationId);
+                    fd.append('name', nextName);
+                    if (replace) {
+                        var input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg';
+                        input.onchange = async function () {
+                            if (!input.files || !input.files[0]) return;
+                            fd.append('file', input.files[0]);
+                            try {
+                                var res = await fetch(
+                                    (typeof withLocationQuery === 'function' ? withLocationQuery('/api/account/needs-list-templates/' + id + '/') : '/api/account/needs-list-templates/' + id + '/'),
+                                    { method: 'PATCH', body: fd }
+                                );
+                                var data = {};
+                                try { data = await res.json(); } catch (e) {}
+                                if (!res.ok) throw new Error(data.error || 'Update failed');
+                                showAlert('Template updated', true);
+                                await loadTemplates();
+                            } catch (e) { showAlert(e.message, false); }
+                        };
+                        input.click();
+                        return;
+                    }
+                    try {
+                        await api('/api/account/needs-list-templates/' + id + '/', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(jsonBody({ name: nextName }))
+                        });
+                        showAlert('Template renamed', true);
+                        await loadTemplates();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>"']/g, function (c) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+            });
+        }
+
+        async function refreshAll() {
+            await loadCategories();
+            await loadPrintGroups();
+            await loadDocuments();
+            await loadTemplates();
+        }
+
+        document.getElementById('form-category').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            try {
+                await api('/api/categories/create/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jsonBody({
+                        name: document.getElementById('cat-name').value.trim(),
+                        description: document.getElementById('cat-desc').value.trim()
+                    }))
+                });
+                e.target.reset();
+                showAlert('Category added', true);
+                closeFormPanel('form-category');
+                await loadCategories();
+            } catch (err) { showAlert(err.message, false); }
+        });
+
+        document.getElementById('form-print-group').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (!locationId) { showAlert('location_id required in URL', false); return; }
+            try {
+                await api('/api/account/print-groups/create/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jsonBody({
+                        name: document.getElementById('pg-name').value.trim(),
+                        description: document.getElementById('pg-desc').value.trim()
+                    }))
+                });
+                e.target.reset();
+                showAlert('Needs list group added', true);
+                closeFormPanel('form-print-group');
+                await loadPrintGroups();
+            } catch (err) { showAlert(err.message, false); }
+        });
+
+        document.getElementById('form-document').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (!locationId) { showAlert('location_id required in URL', false); return; }
+            var pgId = document.getElementById('doc-pg').value;
+            var payload = {
+                name: document.getElementById('doc-name').value.trim(),
+                description: document.getElementById('doc-desc').value.trim(),
+                category_id: parseInt(document.getElementById('doc-category').value, 10),
+                print_group_ids: pgId ? [parseInt(pgId, 10)] : []
+            };
+            try {
+                await api('/api/documents/create/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jsonBody(payload))
+                });
+                e.target.reset();
+                showAlert('Document added — it will show on Individual Documents / Needs List', true);
+                closeFormPanel('form-document');
+                await loadDocuments();
+            } catch (err) { showAlert(err.message, false); }
+        });
+
+        document.getElementById('form-template').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (!locationId) { showAlert('location_id required in URL', false); return; }
+            var name = document.getElementById('tpl-name').value.trim();
+            var fileInput = document.getElementById('tpl-file');
+            if (!name || !fileInput.files || !fileInput.files[0]) {
+                showAlert('Name and file are required', false);
+                return;
+            }
+            var fd = new FormData();
+            fd.append('location_id', locationId);
+            fd.append('name', name);
+            fd.append('file', fileInput.files[0]);
+            try {
+                var res = await fetch(
+                    typeof withLocationQuery === 'function' ? withLocationQuery('/api/account/needs-list-templates/') : '/api/account/needs-list-templates/',
+                    { method: 'POST', body: fd }
+                );
+                var data = {};
+                try { data = await res.json(); } catch (err) {}
+                if (!res.ok) throw new Error(data.error || 'Upload failed');
+                e.target.reset();
+                showAlert('Template uploaded', true);
+                closeFormPanel('form-template');
+                await loadTemplates();
+            } catch (err) { showAlert(err.message, false); }
+        });
+
+        if (!locationId) {
+            showAlert('Open this page with ?location_id= your GHL location id', false);
+        }
+        refreshAll().catch(function (e) { showAlert(e.message, false); });
+    })();
+    </script>
+</body>
+</html>

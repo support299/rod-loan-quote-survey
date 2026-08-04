@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - User Uploads</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fc 0%, #e3f2fd 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2196f3 0%, #42a5f5 50%, #2196f3 100%);
+        }
+
+        .header {
+            padding: 30px;
+            border-bottom: 1px solid #e3f2fd;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f7fc 100%);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #1565c0;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .header .request-id {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+            font-family: monospace;
+        }
+
+        .btn-download-pdf {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 20px;
+            background: #1565c0;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .btn-download-pdf:hover {
+            background: #0d47a1;
+            color: white;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1565c0;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e3f2fd;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title:hover {
+            color: #0d47a1;
+        }
+
+        .section-title::after {
+            content: '▼';
+            font-size: 14px;
+            transition: transform 0.3s;
+        }
+
+        .section-title.collapsed::after {
+            transform: rotate(-90deg);
+        }
+
+        .section-content {
+            overflow: hidden;
+            max-height: 9999px;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .section-content.collapsed {
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        .section-subtitle {
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            margin-top: 24px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-subtitle:hover {
+            color: #333;
+        }
+
+        .section-subtitle::after {
+            content: '▼';
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .section-subtitle.collapsed::after {
+            transform: rotate(-90deg);
+        }
+
+        .document-card {
+            margin-bottom: 16px;
+        }
+
+        .document-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .document-header::after {
+            content: '▼';
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.3s;
+        }
+
+        .document-header.collapsed::after {
+            transform: rotate(-90deg);
+        }
+
+        .document-content {
+            overflow: hidden;
+            max-height: 9999px;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .document-content.collapsed {
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        .print-group-container {
+            margin-bottom: 20px;
+        }
+
+        .print-group-content {
+            overflow: hidden;
+            max-height: 9999px;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .print-group-content.collapsed {
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        .document-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+
+        .document-header {
+            margin-bottom: 16px;
+        }
+
+        .document-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .document-description {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .uploaded-files {
+            margin-top: 16px;
+        }
+
+        .uploaded-file {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 12px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .uploaded-file.accepted {
+            border-left: 4px solid #2196f3;
+            background: #f0f7fc;
+        }
+
+        .uploaded-file.rejected {
+            border-left: 4px solid #e65100;
+            background: #fff8f3;
+        }
+
+        .upload-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .file-icon {
+            font-size: 24px;
+            color: #2196f3;
+        }
+
+        .file-details {
+            flex: 1;
+        }
+
+        .file-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 2px;
+        }
+
+        .file-date {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .file-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        .status-accepted {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .status-pending {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .status-rejected {
+            background: #fbe9e7;
+            color: #bf360c;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .reject-note {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: #fff;
+            border: 1px solid #ffccbc;
+        }
+
+        .reject-note-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #bf360c;
+            margin-bottom: 4px;
+        }
+
+        .reject-note-text {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #4e342e;
+            white-space: pre-wrap;
+        }
+
+        .reject-note-actions {
+            margin-top: 8px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-text {
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: 12px;
+            color: #1565c0;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-text:hover { text-decoration: underline; }
+
+        .btn-text-danger { color: #c62828; }
+
+        .reject-form {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .reject-form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 6px;
+        }
+
+        .reject-textarea {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 13px;
+            font-family: inherit;
+            line-height: 1.4;
+            resize: vertical;
+            min-height: 72px;
+            background: #fff;
+        }
+
+        .reject-textarea:focus {
+            outline: none;
+            border-color: #ff9800;
+            box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.15);
+        }
+
+        .reject-form-actions {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-view {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .btn-view:hover {
+            background: #bbdefb;
+        }
+
+        .btn-accept {
+            background: #2196f3;
+            color: white;
+        }
+
+        .btn-accept:hover {
+            background: #1565c0;
+        }
+
+        .btn-reject {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-reject:hover {
+            background: #e65100;
+        }
+
+        .btn-edit-reason {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .btn-edit-reason:hover {
+            background: #ffe0b2;
+        }
+
+        .btn-loading { pointer-events: none; opacity: 0.85; cursor: not-allowed; }
+        .btn-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+        @keyframes btn-spin { to { transform: rotate(360deg); } }
+
+        .btn-accepted {
+            background: #bbdefb;
+            color: #1565c0;
+            cursor: not-allowed;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 16px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.18s ease, visibility 0.18s ease;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-card {
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+            padding: 20px 22px 16px;
+            transform: translateY(8px) scale(0.98);
+            transition: transform 0.18s ease;
+        }
+
+        .modal-overlay.open .modal-card {
+            transform: translateY(0) scale(1);
+        }
+
+        .modal-title {
+            margin: 0 0 8px;
+            font-size: 17px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .modal-body {
+            margin: 0 0 18px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #64748b;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .btn-modal-cancel {
+            background: #f1f5f9;
+            color: #334155;
+        }
+
+        .btn-modal-cancel:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-modal-confirm {
+            background: #c62828;
+            color: #fff;
+        }
+
+        .btn-modal-confirm:hover {
+            background: #b71c1c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>User Uploads - Admin Review</h1>
+            <div class="subtitle">Review and accept/reject user uploaded documents</div>
+            <div class="request-id">Request ID: {{ request_id }}</div>
+            <a href="{% url 'download-request-pdf' request_id=request_id %}" class="btn-download-pdf" download>Download PDF</a>
+        </div>
+
+        <div class="content">
+            <div id="alert-container"></div>
+
+            <!-- <div class="section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span>AD HOC Documents</span>
+                </div>
+                <div class="section-content {% if not adhoc_documents %}collapsed{% endif %}">
+            {% if adhoc_documents %}
+                {% for doc in adhoc_documents %}
+                <div class="document-card">
+                    <div class="document-header" onclick="toggleDocument(this)">
+                        <div>
+                            <div class="document-name">{{ doc.document_name }}</div>
+                            <div class="document-description">{{ doc.document_description }}</div>
+                        </div>
+                    </div>
+                    <div class="document-content">
+                    <div class="uploaded-files">
+                        {% for upload in doc.uploads %}
+                        {% include "documents/includes/admin_upload_row.html" with upload=upload %}
+                        {% empty %}
+                        <div class="empty-state">No files uploaded yet</div>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
+            {% endif %}
+                </div>
+            </div> -->
+
+            <div class="section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span>Individual Documents</span>
+                </div>
+                <div class="section-content {% if not individual_documents %}collapsed{% endif %}">
+            {% if individual_documents %}
+                {% for doc in individual_documents %}
+                <div class="document-card">
+                    <div class="document-header" onclick="toggleDocument(this)">
+                        <div>
+                            <div class="document-name">{{ doc.document_name }}</div>
+                            <div class="document-description">{{ doc.document_description }}</div>
+                        </div>
+                    </div>
+                    <div class="document-content">
+                    <div class="uploaded-files">
+                        {% for upload in doc.uploads %}
+                        {% include "documents/includes/admin_upload_row.html" with upload=upload %}
+                        {% empty %}
+                        <div class="empty-state">No files uploaded yet</div>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
+            {% endif %}
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span>Needs List Documents</span>
+                </div>
+                <div class="section-content {% if not needs_list_documents %}collapsed{% endif %}">
+            {% if needs_list_documents %}
+                {% for print_group_name, documents in needs_list_documents.items %}
+                <div class="print-group-container">
+                    <div class="section-subtitle" onclick="togglePrintGroup(this)">
+                        <span>{{ print_group_name }}</span>
+                    </div>
+                    <div class="print-group-content">
+                    {% for doc in documents %}
+                    <div class="document-card">
+                        <div class="document-header" onclick="toggleDocument(this)">
+                            <div>
+                                <div class="document-name">{{ doc.document_name }}</div>
+                                <div class="document-description">{{ doc.document_description }}</div>
+                            </div>
+                        </div>
+                        <div class="document-content">
+                        <div class="uploaded-files">
+                        {% for upload in doc.uploads %}
+                        {% include "documents/includes/admin_upload_row.html" with upload=upload %}
+                        {% empty %}
+                        <div class="empty-state">No files uploaded yet</div>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+                {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
+            {% endif %}
+                </div>
+            </div>
+            {% if not adhoc_documents and not individual_documents and not needs_list_documents %}
+            <div class="empty-state">
+                No documents have been selected or uploaded yet.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="confirm-modal" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+            <h3 class="modal-title" id="confirm-modal-title">Remove rejection comment?</h3>
+            <p class="modal-body" id="confirm-modal-body">
+                This removes the admin feedback and sets the file back to Pending Review.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-modal-cancel" id="confirm-modal-cancel">Cancel</button>
+                <button type="button" class="btn btn-modal-confirm" id="confirm-modal-ok">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'documents/ghl_location.js' %}"></script>
+    <script>
+        // Safety fallback in case static helper fails to load.
+        if (typeof withLocationQuery !== 'function') {
+            window.withLocationQuery = function(url) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id) return url;
+                return url + (url.includes('?') ? '&' : '?') + 'location_id=' + encodeURIComponent(id);
+            };
+        }
+        if (typeof withLocationJsonBody !== 'function') {
+            window.withLocationJsonBody = function(obj) {
+                const id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id || !obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+                return { ...obj, location_id: id };
+            };
+        }
+
+        const requestId = '{{ request_id }}';
+        let confirmModalResolver = null;
+
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        function setButtonLoading(btn, loading) {
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.classList.add('btn-loading');
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="btn-spinner"></span>';
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+                btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+            }
+        }
+
+        function openConfirmModal(options) {
+            const overlay = document.getElementById('confirm-modal');
+            const titleEl = document.getElementById('confirm-modal-title');
+            const bodyEl = document.getElementById('confirm-modal-body');
+            const okBtn = document.getElementById('confirm-modal-ok');
+            if (options.title) titleEl.textContent = options.title;
+            if (options.body) bodyEl.textContent = options.body;
+            if (options.confirmLabel) okBtn.textContent = options.confirmLabel;
+            overlay.classList.add('open');
+            overlay.setAttribute('aria-hidden', 'false');
+            okBtn.focus();
+            return new Promise((resolve) => {
+                confirmModalResolver = resolve;
+            });
+        }
+
+        function closeConfirmModal(result) {
+            const overlay = document.getElementById('confirm-modal');
+            overlay.classList.remove('open');
+            overlay.setAttribute('aria-hidden', 'true');
+            if (confirmModalResolver) {
+                confirmModalResolver(result);
+                confirmModalResolver = null;
+            }
+        }
+
+        document.getElementById('confirm-modal-cancel').addEventListener('click', function() {
+            closeConfirmModal(false);
+        });
+        document.getElementById('confirm-modal-ok').addEventListener('click', function() {
+            closeConfirmModal(true);
+        });
+        document.getElementById('confirm-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeConfirmModal(false);
+        });
+        document.addEventListener('keydown', function(e) {
+            const overlay = document.getElementById('confirm-modal');
+            if (e.key === 'Escape' && overlay.classList.contains('open')) {
+                closeConfirmModal(false);
+            }
+        });
+
+        async function toggleAccept(uploadId, accepted, rejectionReason, btn) {
+            setButtonLoading(btn, true);
+            try {
+                const payload = { accepted: accepted };
+                if (!accepted) {
+                    payload.rejection_reason = rejectionReason || '';
+                }
+                const response = await fetch(withLocationQuery(`/api/${requestId}/admin/upload/${uploadId}/accept/`), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(withLocationJsonBody(payload))
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    showAlert(result.error || 'Error updating document status', 'error');
+                }
+            } catch (error) {
+                showAlert('Error updating document status', 'error');
+                console.error('Error:', error);
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        function getRejectForm(uploadId) {
+            return document.querySelector(`[data-reject-form="${uploadId}"]`);
+        }
+
+        function openRejectForm(uploadId) {
+            const form = getRejectForm(uploadId);
+            if (!form) return;
+            form.hidden = false;
+            const note = document.querySelector(`[data-reason-display="${uploadId}"]`);
+            if (note) note.hidden = true;
+            const ta = form.querySelector('textarea');
+            if (ta) {
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+            }
+        }
+
+        function closeRejectForm(uploadId) {
+            const form = getRejectForm(uploadId);
+            if (!form) return;
+            form.hidden = true;
+            const note = document.querySelector(`[data-reason-display="${uploadId}"]`);
+            if (note) note.hidden = false;
+        }
+
+        async function saveRejectionReason(uploadId, reason, btn) {
+            const trimmed = (reason || '').trim();
+            if (!trimmed) {
+                showAlert('Please enter a rejection reason', 'error');
+                return;
+            }
+            setButtonLoading(btn, true);
+            try {
+                await toggleAccept(uploadId, false, trimmed, btn);
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        async function updateRejectionReason(uploadId, reason, btn) {
+            const trimmed = (reason || '').trim();
+            if (!trimmed) {
+                showAlert('Please enter a rejection reason', 'error');
+                return;
+            }
+            setButtonLoading(btn, true);
+            try {
+                const response = await fetch(
+                    withLocationQuery(`/api/${requestId}/admin/upload/${uploadId}/rejection-reason/`),
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(withLocationJsonBody({ rejection_reason: trimmed })),
+                    }
+                );
+                const result = await response.json();
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    showAlert(result.error || 'Error updating reason', 'error');
+                }
+            } catch (error) {
+                showAlert('Error updating reason', 'error');
+                console.error(error);
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        async function deleteRejectionReason(uploadId, btn) {
+            const ok = await openConfirmModal({
+                title: 'Remove rejection comment?',
+                body: 'This removes the admin feedback and sets the file back to Pending Review.',
+                confirmLabel: 'Remove',
+            });
+            if (!ok) return;
+            setButtonLoading(btn, true);
+            try {
+                const response = await fetch(
+                    withLocationQuery(`/api/${requestId}/admin/upload/${uploadId}/rejection-reason/`),
+                    { method: 'DELETE' }
+                );
+                const result = await response.json();
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    showAlert(result.error || 'Error removing reason', 'error');
+                }
+            } catch (error) {
+                showAlert('Error removing reason', 'error');
+                console.error(error);
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const uploadId = btn.getAttribute('data-upload-id');
+            if (!uploadId || !action) return;
+
+            if (action === 'accept') {
+                toggleAccept(uploadId, true, '', btn);
+            } else if (action === 'reject' || action === 'edit-reason') {
+                openRejectForm(uploadId);
+            } else if (action === 'cancel-reject') {
+                closeRejectForm(uploadId);
+            } else if (action === 'submit-reject') {
+                const form = getRejectForm(uploadId);
+                const reason = form ? form.querySelector('textarea').value : '';
+                const row = btn.closest('.uploaded-file');
+                const alreadyRejected = row && row.classList.contains('rejected');
+                if (alreadyRejected) {
+                    updateRejectionReason(uploadId, reason, btn);
+                } else {
+                    saveRejectionReason(uploadId, reason, btn);
+                }
+            } else if (action === 'delete-reason') {
+                deleteRejectionReason(uploadId, btn);
+            }
+        });
+
+        function toggleSection(element) {
+            const content = element.nextElementSibling;
+            element.classList.toggle('collapsed');
+            content.classList.toggle('collapsed');
+        }
+
+        function togglePrintGroup(element) {
+            const content = element.nextElementSibling;
+            element.classList.toggle('collapsed');
+            content.classList.toggle('collapsed');
+        }
+
+        function toggleDocument(element) {
+            const content = element.nextElementSibling;
+            element.classList.toggle('collapsed');
+            content.classList.toggle('collapsed');
+        }
+    </script>
+</body>
+</html>

@@ -28,7 +28,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = True
 
 # Also ensure your IP is in ALLOWED_HOSTS
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37', 'survey.flipfunding.com']
 
 # Allow CSRF when form is embedded in iframe on these origins (e.g. GoHighLevel)
 CSRF_TRUSTED_ORIGINS = [

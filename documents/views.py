@@ -344,6 +344,56 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'sms_consent': 'SMS Consent',
 }
 
+# Conditional fields: key -> (trigger_field, allowed_values). Empty frozenset = never keep.
+# Must match template data-show-when / data-show-values in opportunity_card_form.html.
+OPPORTUNITY_CARD_CONDITIONAL_FIELDS = {
+    'dscr_loan_type': ('loan_type', frozenset({'DSCR'})),
+    'bridge_loan_type': ('loan_type', frozenset({'BRIDGE'})),
+    'total_number_of_units': (
+        'property_type',
+        frozenset({'SFH', 'Townhome', '2-4 units', '5+ Units', 'Mixed Use', 'Commercial'}),
+    ),
+    'commercial_property_type': (
+        'property_type',
+        frozenset({'Commercial', 'Mixed Use'}),
+    ),
+    'please_specify': ('commercial_property_type', frozenset({'Others'})),
+    'original_acquisition_date': ('loan_type', frozenset()),  # always hidden duplicate
+}
+
+
+def _opportunity_card_field_visible(key, form_data):
+    """True if conditional field should be kept for this submission."""
+    rule = OPPORTUNITY_CARD_CONDITIONAL_FIELDS.get(key)
+    if not rule:
+        return True
+    when, allowed = rule
+    if not allowed:
+        return False
+    parent = form_data.get(when)
+    if isinstance(parent, str):
+        parent = parent.strip()
+    else:
+        parent = str(parent or '').strip()
+    if parent not in allowed:
+        return False
+    # Nested: Please Specify only if Commercial Property Type itself is visible
+    if key == 'please_specify':
+        return _opportunity_card_field_visible('commercial_property_type', form_data)
+    return True
+
+
+def _strip_hidden_opportunity_card_fields(form_data):
+    """Drop values for fields that are hidden for the submitted answers (API-level skip)."""
+    if not form_data:
+        return form_data
+    cleaned = dict(form_data)
+    for key in list(cleaned.keys()):
+        if not _opportunity_card_field_visible(key, cleaned):
+            cleaned.pop(key, None)
+    return cleaned
+
+
 logger = logging.getLogger(__name__)
 
 # Fallback GHL opportunity custom field IDs when no GHLCustomField row exists for the account
@@ -595,6 +645,8 @@ def opportunity_card_form(request, request_id):
             if value is not None:
                 form_data[key] = value.strip() if isinstance(value, str) else value
         form_data['sms_consent'] = 'Yes' if request.POST.get('sms_consent') else 'No'
+        # Skip values for fields hidden by loan/property conditionals (mirror template rules)
+        form_data = _strip_hidden_opportunity_card_fields(form_data)
         submission, created = OpportunityCardSubmission.objects.update_or_create(
             request_id=request_id,
             defaults={'form_data': form_data}

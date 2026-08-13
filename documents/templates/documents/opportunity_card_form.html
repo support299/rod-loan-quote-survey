@@ -396,9 +396,9 @@
                                 <label for="number_of_units">Number of Units <span class="required">*</span></label>
                                 <input type="text" id="number_of_units" name="number_of_units" required>
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_total_number_of_units" data-show-when="property_type" data-show-values="SFH,Townhome,2-4 units,5+ Units,Mixed Use,Commercial">
                                 <label for="total_number_of_units">Total Number of Units <span class="required">*</span></label>
-                                <input type="text" id="total_number_of_units" name="total_number_of_units" required>
+                                <input type="text" id="total_number_of_units" name="total_number_of_units">
                             </div>
                             <div class="field-group field-full">
                                 <label for="residential_sqft_51_percent">Is Residential Square footage at least 51% of the property sq footage? <span class="required">*</span></label>
@@ -463,9 +463,10 @@
                                 <label for="original_acquisition_cost">Original Acquisition Cost <span class="required">*</span></label>
                                 <input type="text" id="original_acquisition_cost" name="original_acquisition_cost" required>
                             </div>
-                            <div class="field-group field-full">
+                            <!-- Duplicate of Original Purchase Date — keep in DOM for old submissions, never show -->
+                            <div class="field-group field-full conditional-field" id="wrap_original_acquisition_date" data-show-when="loan_type" data-show-values="__never__">
                                 <label for="original_acquisition_date">Original Acquisition Date <span class="required">*</span></label>
-                                <input type="date" id="original_acquisition_date" name="original_acquisition_date" required>
+                                <input type="date" id="original_acquisition_date" name="original_acquisition_date">
                             </div>
                             <div class="field-group field-full">
                                 <label for="arv">ARV (After Repair Value) <span class="required">*</span></label>

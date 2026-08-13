@@ -361,21 +361,44 @@ OPPORTUNITY_CARD_CONDITIONAL_FIELDS = {
     'original_acquisition_date': ('loan_type', frozenset()),  # always hidden duplicate
 }
 
+# Show only for refinance subtypes (OR across these triggers).
+# Hide for purchase paths: DSCR Purchase, Purchase Bridge, Fix & Flip, Ground-Up, etc.
+OPPORTUNITY_CARD_REFI_ONLY_FIELDS = frozenset({
+    'original_purchase_price',
+    'original_purchase_date',
+})
+OPPORTUNITY_CARD_REFI_TRIGGERS = {
+    'dscr_loan_type': frozenset({'DSCR Refinance'}),
+    'bridge_loan_type': frozenset({'Refi Bridge', 'Refi-Rehab'}),
+}
+
+
+def _form_value(form_data, key):
+    parent = form_data.get(key) if form_data else None
+    if isinstance(parent, str):
+        return parent.strip()
+    return str(parent or '').strip()
+
+
+def _is_refinance_submission(form_data):
+    """True when DSCR Refinance, Refi Bridge, or Refi-Rehab is selected."""
+    for field, allowed in OPPORTUNITY_CARD_REFI_TRIGGERS.items():
+        if _form_value(form_data, field) in allowed:
+            return True
+    return False
+
 
 def _opportunity_card_field_visible(key, form_data):
     """True if conditional field should be kept for this submission."""
+    if key in OPPORTUNITY_CARD_REFI_ONLY_FIELDS:
+        return _is_refinance_submission(form_data)
     rule = OPPORTUNITY_CARD_CONDITIONAL_FIELDS.get(key)
     if not rule:
         return True
     when, allowed = rule
     if not allowed:
         return False
-    parent = form_data.get(when)
-    if isinstance(parent, str):
-        parent = parent.strip()
-    else:
-        parent = str(parent or '').strip()
-    if parent not in allowed:
+    if _form_value(form_data, when) not in allowed:
         return False
     # Nested: Please Specify only if Commercial Property Type itself is visible
     if key == 'please_specify':

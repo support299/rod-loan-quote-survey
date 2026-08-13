@@ -443,13 +443,13 @@
                                 <label for="purchase_price_original_if_refi">Purchase Price (Original Purchase Price if Refi) <span class="required">*</span></label>
                                 <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi" required>
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_price" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi Bridge,Refi-Rehab">
                                 <label for="original_purchase_price">Original Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="original_purchase_price" name="original_purchase_price" required>
+                                <input type="text" id="original_purchase_price" name="original_purchase_price">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi Bridge,Refi-Rehab">
                                 <label for="original_purchase_date">Original Purchase Date <span class="required">*</span></label>
-                                <input type="date" id="original_purchase_date" name="original_purchase_date" required>
+                                <input type="date" id="original_purchase_date" name="original_purchase_date">
                             </div>
                             <div class="field-group field-full">
                                 <label for="purchase_price">Purchase Price <span class="required">*</span></label>
@@ -577,12 +577,30 @@
                 return el.value || '';
             }
 
+            function matchesShowAny(wrap) {
+                // Format: "field:val1,val2|other_field:val3" — show if any group matches
+                var rules = wrap.getAttribute('data-show-any');
+                if (!rules) return null;
+                return rules.split('|').some(function(rule) {
+                    var parts = rule.split(':');
+                    var field = (parts[0] || '').trim();
+                    var vals = (parts[1] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                    return vals.indexOf(getTriggerValue(field)) !== -1;
+                });
+            }
+
             function updateConditionalFields() {
                 form.querySelectorAll('.conditional-field').forEach(function(wrap) {
-                    var when = wrap.getAttribute('data-show-when');
-                    var values = (wrap.getAttribute('data-show-values') || '').split(',').map(function(s) { return s.trim(); });
-                    var current = getTriggerValue(when);
-                    var show = values.indexOf(current) !== -1;
+                    var showAny = matchesShowAny(wrap);
+                    var show;
+                    if (showAny !== null) {
+                        show = showAny;
+                    } else {
+                        var when = wrap.getAttribute('data-show-when');
+                        var values = (wrap.getAttribute('data-show-values') || '').split(',').map(function(s) { return s.trim(); });
+                        var current = getTriggerValue(when);
+                        show = values.indexOf(current) !== -1;
+                    }
                     wrap.classList.toggle('hidden', !show);
                     wrap.querySelectorAll('input, select, textarea').forEach(function(inp) {
                         if (!show) {

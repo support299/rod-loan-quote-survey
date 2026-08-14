@@ -1896,7 +1896,7 @@ def save_admin_selections(request, request_id):
                 names.append(name)
 
             custom_fields = []
-            upload_url = f"https://unscavenged-uncalumnious-desmond.ngrok-free.dev/{request_id}/upload/"
+            upload_url = f"https://survey.flipfunding.com/{request_id}/upload/"
 
             # Needs List Items – only if we have at least one name
             if names and items_field_id:

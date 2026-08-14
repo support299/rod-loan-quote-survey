@@ -344,28 +344,57 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'sms_consent': 'SMS Consent',
 }
 
-# Conditional fields: key -> (trigger_field, allowed_values). Empty frozenset = never keep.
-# Must match template data-show-when / data-show-values in opportunity_card_form.html.
-OPPORTUNITY_CARD_CONDITIONAL_FIELDS = {
-    'dscr_loan_type': ('loan_type', frozenset({'DSCR'})),
-    'bridge_loan_type': ('loan_type', frozenset({'BRIDGE'})),
-    'total_number_of_units': (
-        'property_type',
-        frozenset({'SFH', 'Townhome', '2-4 units', '5+ Units', 'Mixed Use', 'Commercial'}),
-    ),
-    'commercial_property_type': (
-        'property_type',
-        frozenset({'Commercial', 'Mixed Use'}),
-    ),
-    'please_specify': ('commercial_property_type', frozenset({'Others'})),
-    'original_acquisition_date': ('loan_type', frozenset()),  # always hidden duplicate
+# Always kept (steps 1–2 + step 3 shell).
+OPPORTUNITY_CARD_ALWAYS_FIELDS = frozenset({
+    'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
+    'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
+    'subject_property_address', 'loan_type', 'sms_consent',
+})
+
+# Step 3 fields allowed per Loan Type (nested rules applied separately).
+OPPORTUNITY_CARD_LOAN_TYPE_FIELDS = {
+    'FIX & FLIP': frozenset({
+        'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
+        'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
+        'purchase_price', 'rehab_budget', 'arv', 'exit_strategy',
+    }),
+    'DSCR': frozenset({
+        'dscr_loan_type', 'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
+        'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
+        'purchase_price_original_if_refi', 'original_purchase_date',
+        'estimated_property_value', 'annual_insurance', 'annual_tax', 'monthly_rent',
+        'existing_mortgage', 'occupancy', 'units_leased',
+    }),
+    'BRIDGE': frozenset({
+        'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
+        'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
+        'bridge_loan_type', 'original_purchase_price', 'original_purchase_date',
+        'original_acquisition_cost', 'original_acquisition_date', 'purchase_price',
+        'rehab_budget', 'arv',
+        'current_property_value', 'intended_exit', 'existing_loan_balance',
+    }),
+    'GROUND-UP CONSTRUCTION': frozenset({
+        'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
+        'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
+        'lot_owned', 'purchase_price', 'as_is_value', 'construction_budget', 'final_value',
+        'zoning_permit_status', 'lot_purchase_price',
+    }),
 }
 
-# Show only for refinance subtypes (OR across these triggers).
-# Hide for purchase paths: DSCR Purchase, Purchase Bridge, Fix & Flip, Ground-Up, etc.
-OPPORTUNITY_CARD_REFI_ONLY_FIELDS = frozenset({
-    'original_purchase_price',
+# Original Purchase Date: DSCR Refinance / Bridge Refi Bridge / Refi-Rehab / Purchase Bridge
+# Refi Bridge only: Original Acquisition Cost + Date
+# Refi-Rehab only: Original Purchase Price + Rehab Budget + ARV
+OPPORTUNITY_CARD_REFI_DATE_FIELDS = frozenset({
     'original_purchase_date',
+})
+OPPORTUNITY_CARD_BRIDGE_REFI_BRIDGE_FIELDS = frozenset({
+    'original_acquisition_cost',
+    'original_acquisition_date',
+})
+OPPORTUNITY_CARD_BRIDGE_REFI_REHAB_FIELDS = frozenset({
+    'original_purchase_price',
+    'rehab_budget',
+    'arv',
 })
 OPPORTUNITY_CARD_REFI_TRIGGERS = {
     'dscr_loan_type': frozenset({'DSCR Refinance'}),
@@ -381,28 +410,76 @@ def _form_value(form_data, key):
 
 
 def _is_refinance_submission(form_data):
-    """True when DSCR Refinance, Refi Bridge, or Refi-Rehab is selected."""
-    for field, allowed in OPPORTUNITY_CARD_REFI_TRIGGERS.items():
-        if _form_value(form_data, field) in allowed:
-            return True
+    """True when the active loan path is a refinance subtype."""
+    loan_type = _form_value(form_data, 'loan_type')
+    if loan_type == 'DSCR':
+        return _form_value(form_data, 'dscr_loan_type') == 'DSCR Refinance'
+    if loan_type == 'BRIDGE':
+        return _form_value(form_data, 'bridge_loan_type') in {'Refi Bridge', 'Refi-Rehab'}
     return False
 
 
+def _is_bridge_refi_bridge_submission(form_data):
+    return (
+        _form_value(form_data, 'loan_type') == 'BRIDGE'
+        and _form_value(form_data, 'bridge_loan_type') == 'Refi Bridge'
+    )
+
+
+def _is_bridge_refi_rehab_submission(form_data):
+    return (
+        _form_value(form_data, 'loan_type') == 'BRIDGE'
+        and _form_value(form_data, 'bridge_loan_type') == 'Refi-Rehab'
+    )
+
+
 def _opportunity_card_field_visible(key, form_data):
-    """True if conditional field should be kept for this submission."""
-    if key in OPPORTUNITY_CARD_REFI_ONLY_FIELDS:
-        return _is_refinance_submission(form_data)
-    rule = OPPORTUNITY_CARD_CONDITIONAL_FIELDS.get(key)
-    if not rule:
+    """True if field should be kept for this submission (mirrors step-3 form rules)."""
+    if key in OPPORTUNITY_CARD_ALWAYS_FIELDS:
         return True
-    when, allowed = rule
-    if not allowed:
+
+    loan_type = _form_value(form_data, 'loan_type')
+    allowed = OPPORTUNITY_CARD_LOAN_TYPE_FIELDS.get(loan_type, frozenset())
+    if key not in allowed:
         return False
-    if _form_value(form_data, when) not in allowed:
-        return False
-    # Nested: Please Specify only if Commercial Property Type itself is visible
+
+    property_type = _form_value(form_data, 'property_type')
+    bridge_type = _form_value(form_data, 'bridge_loan_type')
+
+    if key == 'number_of_units':
+        return property_type in {'Multifamily', '2-4 units'}
+    if key in {
+        'units_residential',
+        'units_commercial',
+        'total_number_of_units',
+        'residential_sqft_51_percent',
+    }:
+        return property_type == 'Mixed Use'
+    if key == 'commercial_property_type':
+        return property_type == 'Commercial'
     if key == 'please_specify':
-        return _opportunity_card_field_visible('commercial_property_type', form_data)
+        return (
+            property_type == 'Commercial'
+            and _form_value(form_data, 'commercial_property_type') == 'Others'
+        )
+    if key == 'units_leased':
+        return _form_value(form_data, 'occupancy') == 'Partially Leased'
+    if key == 'purchase_price':
+        return loan_type in {'FIX & FLIP', 'GROUND-UP CONSTRUCTION'} or (
+            loan_type == 'BRIDGE' and bridge_type == 'Purchase Bridge'
+        )
+    if key == 'rehab_budget' or key == 'arv':
+        return loan_type == 'FIX & FLIP' or _is_bridge_refi_rehab_submission(form_data)
+    if key == 'original_purchase_price':
+        return _is_bridge_refi_rehab_submission(form_data)
+    if key in OPPORTUNITY_CARD_BRIDGE_REFI_BRIDGE_FIELDS:
+        return _is_bridge_refi_bridge_submission(form_data)
+    if key in OPPORTUNITY_CARD_REFI_DATE_FIELDS:
+        if loan_type == 'DSCR':
+            return _form_value(form_data, 'dscr_loan_type') == 'DSCR Refinance'
+        if loan_type == 'BRIDGE':
+            return bridge_type == 'Refi-Rehab'
+        return False
     return True
 
 

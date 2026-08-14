@@ -182,17 +182,8 @@
         .consent-row input { margin-top: 3px; accent-color: var(--primary); }
         .consent-row label { font-size: 13px; font-weight: 400; color: var(--text-muted); line-height: 1.45; }
 
-        .conditional-field {
-            overflow: hidden;
-            transition: opacity 0.25s ease, max-height 0.3s ease;
-        }
-
         .conditional-field.hidden {
-            opacity: 0;
-            max-height: 0;
-            margin: 0 !important;
-            padding: 0 !important;
-            visibility: hidden;
+            display: none !important;
         }
 
         .step-nav {
@@ -344,7 +335,7 @@
                     </section>
                 </div>
 
-                <!-- Step 3 (image Slide 4) -->
+                <!-- Step 3: Loan Info — fields depend on Loan Type -->
                 <div class="form-step" data-step="3">
                     <section class="section">
                         <h2 class="section-title">Loan Info</h2>
@@ -363,6 +354,8 @@
                                     <option value="GROUND-UP CONSTRUCTION">GROUND-UP CONSTRUCTION</option>
                                 </select>
                             </div>
+
+                            <!-- DSCR only -->
                             <div class="field-group field-full conditional-field" id="wrap_dscr_loan_type" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="dscr_loan_type">DSCR Loan Type <span class="required">*</span></label>
                                 <select id="dscr_loan_type" name="dscr_loan_type">
@@ -371,9 +364,11 @@
                                     <option value="DSCR Refinance">DSCR Refinance</option>
                                 </select>
                             </div>
-                            <div class="field-group field-full">
+
+                            <!-- All loan types once selected -->
+                            <div class="field-group field-full conditional-field" id="wrap_property_type" data-show-when="loan_type" data-show-values="FIX & FLIP,DSCR,BRIDGE,GROUND-UP CONSTRUCTION">
                                 <label for="property_type">Property Type <span class="required">*</span></label>
-                                <select id="property_type" name="property_type" required>
+                                <select id="property_type" name="property_type">
                                     <option value="">Select</option>
                                     <option value="SFH">SFH</option>
                                     <option value="Townhome">Townhome</option>
@@ -384,27 +379,28 @@
                                     <option value="Commercial">Commercial</option>
                                 </select>
                             </div>
-                            <div class="field-group field-full">
-                                <label for="units_residential">How many units are Residential? <span class="required">*</span></label>
-                                <input type="text" id="units_residential" name="units_residential" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="units_commercial">How many units are Commercial? <span class="required">*</span></label>
-                                <input type="text" id="units_commercial" name="units_commercial" required>
-                            </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_number_of_units" data-show-when="property_type" data-show-values="Multifamily,2-4 units">
                                 <label for="number_of_units">Number of Units <span class="required">*</span></label>
-                                <input type="text" id="number_of_units" name="number_of_units" required>
+                                <input type="text" id="number_of_units" name="number_of_units">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_total_number_of_units" data-show-when="property_type" data-show-values="SFH,Townhome,2-4 units,5+ Units,Mixed Use,Commercial">
+                            <!-- Mixed Use (any loan type that shows Property Type) -->
+                            <div class="field-group field-full conditional-field" id="wrap_units_residential" data-show-when="property_type" data-show-values="Mixed Use">
+                                <label for="units_residential">How many units are Residential? <span class="required">*</span></label>
+                                <input type="text" id="units_residential" name="units_residential">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_units_commercial" data-show-when="property_type" data-show-values="Mixed Use">
+                                <label for="units_commercial">How many units are Commercial? <span class="required">*</span></label>
+                                <input type="text" id="units_commercial" name="units_commercial">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_total_number_of_units" data-show-when="property_type" data-show-values="Mixed Use">
                                 <label for="total_number_of_units">Total Number of Units <span class="required">*</span></label>
                                 <input type="text" id="total_number_of_units" name="total_number_of_units">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_residential_sqft_51_percent" data-show-when="property_type" data-show-values="Mixed Use">
                                 <label for="residential_sqft_51_percent">Is Residential Square footage at least 51% of the property sq footage? <span class="required">*</span></label>
-                                <input type="text" id="residential_sqft_51_percent" name="residential_sqft_51_percent" required>
+                                <input type="text" id="residential_sqft_51_percent" name="residential_sqft_51_percent">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_commercial_property_type" data-show-when="property_type" data-show-values="Commercial,Mixed Use">
+                            <div class="field-group field-full conditional-field" id="wrap_commercial_property_type" data-show-when="property_type" data-show-values="Commercial">
                                 <label for="commercial_property_type">Commercial Property Type <span class="required">*</span></label>
                                 <select id="commercial_property_type" name="commercial_property_type">
                                     <option value="">Select</option>
@@ -419,17 +415,8 @@
                                 <label for="please_specify">Please Specify <span class="required">*</span></label>
                                 <input type="text" id="please_specify" name="please_specify">
                             </div>
-                            <div class="field-group field-full">
-                                <label>Lot Owned? <span class="required">*</span></label>
-                                <div class="radio-row">
-                                    <label class="radio-option"><input type="radio" name="lot_owned" value="Yes" required> Yes</label>
-                                    <label class="radio-option"><input type="radio" name="lot_owned" value="No"> No</label>
-                                </div>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="payoff">Payoff <span class="required">*</span></label>
-                                <input type="text" id="payoff" name="payoff" required>
-                            </div>
+
+                            <!-- Bridge only (after Property Type, per layout) -->
                             <div class="field-group field-full conditional-field" id="wrap_bridge_loan_type" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="bridge_loan_type">Bridge Loan Type <span class="required">*</span></label>
                                 <select id="bridge_loan_type" name="bridge_loan_type">
@@ -439,82 +426,103 @@
                                     <option value="Refi-Rehab">Refi-Rehab</option>
                                 </select>
                             </div>
-                            <div class="field-group field-full">
+
+                            <!-- DSCR purchase / refi price label -->
+                            <div class="field-group field-full conditional-field" id="wrap_purchase_price_original_if_refi" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="purchase_price_original_if_refi">Purchase Price (Original Purchase Price if Refi) <span class="required">*</span></label>
-                                <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi" required>
+                                <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_price" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi Bridge,Refi-Rehab">
+
+                            <!-- Bridge Refi-Rehab: Original Purchase Price -->
+                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_price" data-show-when="bridge_loan_type" data-show-values="Refi-Rehab">
                                 <label for="original_purchase_price">Original Purchase Price <span class="required">*</span></label>
                                 <input type="text" id="original_purchase_price" name="original_purchase_price">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi Bridge,Refi-Rehab">
+                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi-Rehab">
                                 <label for="original_purchase_date">Original Purchase Date <span class="required">*</span></label>
                                 <input type="date" id="original_purchase_date" name="original_purchase_date">
                             </div>
-                            <div class="field-group field-full">
-                                <label for="purchase_price">Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="purchase_price" name="purchase_price" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="rehab_budget">Rehab Budget <span class="required">*</span></label>
-                                <input type="text" id="rehab_budget" name="rehab_budget" required>
-                            </div>
-                            <div class="field-group field-full">
+                            <!-- Bridge Refi Bridge only: acquisition fields -->
+                            <div class="field-group field-full conditional-field" id="wrap_original_acquisition_cost" data-show-when="bridge_loan_type" data-show-values="Refi Bridge">
                                 <label for="original_acquisition_cost">Original Acquisition Cost <span class="required">*</span></label>
-                                <input type="text" id="original_acquisition_cost" name="original_acquisition_cost" required>
+                                <input type="text" id="original_acquisition_cost" name="original_acquisition_cost">
                             </div>
-                            <!-- Duplicate of Original Purchase Date — keep in DOM for old submissions, never show -->
-                            <div class="field-group field-full conditional-field" id="wrap_original_acquisition_date" data-show-when="loan_type" data-show-values="__never__">
+                            <div class="field-group field-full conditional-field" id="wrap_original_acquisition_date" data-show-when="bridge_loan_type" data-show-values="Refi Bridge">
                                 <label for="original_acquisition_date">Original Acquisition Date <span class="required">*</span></label>
                                 <input type="date" id="original_acquisition_date" name="original_acquisition_date">
                             </div>
-                            <div class="field-group field-full">
+
+                            <!-- Lot owned (Ground-Up), then shared Purchase Price / rehab fields -->
+                            <div class="field-group field-full conditional-field" id="wrap_lot_owned" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
+                                <label>Lot Owned? <span class="required">*</span></label>
+                                <div class="radio-row">
+                                    <label class="radio-option"><input type="radio" name="lot_owned" value="Yes"> Yes</label>
+                                    <label class="radio-option"><input type="radio" name="lot_owned" value="No"> No</label>
+                                </div>
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_purchase_price" data-show-any="loan_type:FIX & FLIP,GROUND-UP CONSTRUCTION|bridge_loan_type:Purchase Bridge">
+                                <label for="purchase_price">Purchase Price <span class="required">*</span></label>
+                                <input type="text" id="purchase_price" name="purchase_price">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_rehab_budget" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
+                                <label for="rehab_budget">Rehab Budget <span class="required">*</span></label>
+                                <input type="text" id="rehab_budget" name="rehab_budget">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_arv" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
                                 <label for="arv">ARV (After Repair Value) <span class="required">*</span></label>
-                                <input type="text" id="arv" name="arv" required>
+                                <input type="text" id="arv" name="arv">
                             </div>
-                            <div class="field-group field-full">
-                                <label for="estimated_property_value">Estimated Property Value <span class="required">*</span></label>
-                                <input type="text" id="estimated_property_value" name="estimated_property_value" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="annual_insurance">Annual Insurance <span class="required">*</span></label>
-                                <input type="text" id="annual_insurance" name="annual_insurance" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="annual_tax">Annual Tax <span class="required">*</span></label>
-                                <input type="text" id="annual_tax" name="annual_tax" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="monthly_rent">Monthly Rent <span class="required">*</span></label>
-                                <input type="text" id="monthly_rent" name="monthly_rent" required>
-                            </div>
-                            <div class="field-group field-full">
-                                <label for="existing_mortgage">Existing Mortgage (put N/A if Purchase) <span class="required">*</span></label>
-                                <input type="text" id="existing_mortgage" name="existing_mortgage" required>
-                            </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_exit_strategy" data-show-when="loan_type" data-show-values="FIX & FLIP">
                                 <label for="exit_strategy">Exit Strategy <span class="required">*</span></label>
-                                <input type="text" id="exit_strategy" name="exit_strategy" required>
+                                <input type="text" id="exit_strategy" name="exit_strategy">
                             </div>
-                            <div class="field-group field-full">
-                                <label for="current_property_value">Current Property Value <span class="required">*</span></label>
-                                <input type="text" id="current_property_value" name="current_property_value" required>
-                            </div>
-                            <div class="field-group field-full">
+
+                            <!-- GROUND-UP CONSTRUCTION (continued) -->
+                            <div class="field-group field-full conditional-field" id="wrap_as_is_value" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="as_is_value">As-Is Value <span class="required">*</span></label>
-                                <input type="text" id="as_is_value" name="as_is_value" required>
+                                <input type="text" id="as_is_value" name="as_is_value">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_construction_budget" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="construction_budget">Construction Budget <span class="required">*</span></label>
-                                <input type="text" id="construction_budget" name="construction_budget" required>
+                                <input type="text" id="construction_budget" name="construction_budget">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_final_value" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="final_value">Final Value <span class="required">*</span></label>
-                                <input type="text" id="final_value" name="final_value" required>
+                                <input type="text" id="final_value" name="final_value">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_zoning_permit_status" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
+                                <label for="zoning_permit_status">Zoning &amp; Permit Status <span class="required">*</span></label>
+                                <input type="text" id="zoning_permit_status" name="zoning_permit_status">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_lot_purchase_price" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
+                                <label for="lot_purchase_price">Lot Purchase Price <span class="required">*</span></label>
+                                <input type="text" id="lot_purchase_price" name="lot_purchase_price">
+                            </div>
+
+                            <!-- DSCR (continued) -->
+                            <div class="field-group field-full conditional-field" id="wrap_estimated_property_value" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="estimated_property_value">Estimated Property Value <span class="required">*</span></label>
+                                <input type="text" id="estimated_property_value" name="estimated_property_value">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_annual_insurance" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="annual_insurance">Annual Insurance <span class="required">*</span></label>
+                                <input type="text" id="annual_insurance" name="annual_insurance">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_annual_tax" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="annual_tax">Annual Tax <span class="required">*</span></label>
+                                <input type="text" id="annual_tax" name="annual_tax">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_monthly_rent" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="monthly_rent">Monthly Rent <span class="required">*</span></label>
+                                <input type="text" id="monthly_rent" name="monthly_rent">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_existing_mortgage" data-show-when="loan_type" data-show-values="DSCR">
+                                <label for="existing_mortgage">Existing Mortgage (put N/A if Purchase) <span class="required">*</span></label>
+                                <input type="text" id="existing_mortgage" name="existing_mortgage">
+                            </div>
+                            <div class="field-group field-full conditional-field" id="wrap_occupancy" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="occupancy">Occupancy <span class="required">*</span></label>
-                                <select id="occupancy" name="occupancy" required>
+                                <select id="occupancy" name="occupancy">
                                     <option value="">Select</option>
                                     <option value="Leased">Leased</option>
                                     <option value="Vacant">Vacant</option>
@@ -522,30 +530,29 @@
                                     <option value="Partially Leased">Partially Leased</option>
                                 </select>
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_units_leased" data-show-when="occupancy" data-show-values="Partially Leased">
                                 <label for="units_leased">How many units are leased? <span class="required">*</span></label>
-                                <input type="text" id="units_leased" name="units_leased" required>
+                                <input type="text" id="units_leased" name="units_leased">
                             </div>
-                            <div class="field-group field-full">
-                                <label for="zoning_permit_status">Zoning & Permit Status <span class="required">*</span></label>
-                                <input type="text" id="zoning_permit_status" name="zoning_permit_status" required>
+
+                            <!-- BRIDGE (continued) -->
+                            <div class="field-group field-full conditional-field" id="wrap_current_property_value" data-show-when="loan_type" data-show-values="BRIDGE">
+                                <label for="current_property_value">Current Property Value <span class="required">*</span></label>
+                                <input type="text" id="current_property_value" name="current_property_value">
                             </div>
-                            <div class="field-group field-full">
-                                <label for="lot_purchase_price">Lot Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="lot_purchase_price" name="lot_purchase_price" required>
-                            </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_intended_exit" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="intended_exit">Intended Exit (Sale, Refi) <span class="required">*</span></label>
-                                <input type="text" id="intended_exit" name="intended_exit" required>
+                                <input type="text" id="intended_exit" name="intended_exit">
                             </div>
-                            <div class="field-group field-full">
+                            <div class="field-group field-full conditional-field" id="wrap_existing_loan_balance" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="existing_loan_balance">Existing Loan Balance (N/A if Purchase Bridge)</label>
                                 <input type="text" id="existing_loan_balance" name="existing_loan_balance">
                             </div>
+
                             <div class="field-group field-full">
                                 <div class="consent-row">
                                     <input type="checkbox" id="sms_consent" name="sms_consent" value="Yes">
-                                    <label for="sms_consent">I Consent to Receive SMS Notifications, Alerts &amp; Occasional Marketing Communication from company. Message frequency varies. Message &amp; data rates may apply. Text HELP for assistance. You can reply STOP to unsubscribe at any time.</label>
+                                    <label for="sms_consent">I Consent to Receive SMS Notifications, Alerts &amp; Occasional Marketing Communication from company. Message frequency varies. Message &amp; data rates may apply. Text HELP to <strong>(844) 998-2949</strong> for assistance. You can reply STOP to unsubscribe at any time.</label>
                                 </div>
                             </div>
                         </div>
@@ -589,11 +596,26 @@
                 });
             }
 
+            function matchesShowAll(wrap) {
+                // Format: "field:val1|other_field:val2" — show only if every group matches
+                var rules = wrap.getAttribute('data-show-all');
+                if (!rules) return null;
+                return rules.split('|').every(function(rule) {
+                    var parts = rule.split(':');
+                    var field = (parts[0] || '').trim();
+                    var vals = (parts[1] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                    return vals.indexOf(getTriggerValue(field)) !== -1;
+                });
+            }
+
             function updateConditionalFields() {
                 form.querySelectorAll('.conditional-field').forEach(function(wrap) {
+                    var showAll = matchesShowAll(wrap);
                     var showAny = matchesShowAny(wrap);
                     var show;
-                    if (showAny !== null) {
+                    if (showAll !== null) {
+                        show = showAll;
+                    } else if (showAny !== null) {
                         show = showAny;
                     } else {
                         var when = wrap.getAttribute('data-show-when');
@@ -608,7 +630,8 @@
                             else inp.value = '';
                             inp.removeAttribute('required');
                         } else if (wrap.querySelector('label .required')) {
-                            if (inp.type !== 'radio' && inp.type !== 'checkbox') inp.setAttribute('required', 'required');
+                            if (inp.type === 'checkbox') return;
+                            inp.setAttribute('required', 'required');
                         }
                     });
                 });

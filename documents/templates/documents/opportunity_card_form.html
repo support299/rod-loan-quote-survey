@@ -321,7 +321,7 @@
                         <div class="section-fields">
                             <div class="field-group field-full">
                                 <label for="fix_and_hold_properties">Fix-and-Hold properties currently generating income (past 36 months) <span class="required">*</span></label>
-                                <input type="text" id="fix_and_hold_properties" name="fix_and_hold_properties" required>
+                                <input type="text" id="fix_and_hold_properties" name="fix_and_hold_properties" required placeholder="$">
                             </div>
                             <div class="field-group field-full">
                                 <label for="fix_and_flip_properties">Fix-and-Flip properties sold (past 36 months) <span class="required">*</span></label>
@@ -365,6 +365,17 @@
                                 </select>
                             </div>
 
+                            <!-- Bridge only — immediately after Loan Type -->
+                            <div class="field-group field-full conditional-field" id="wrap_bridge_loan_type" data-show-when="loan_type" data-show-values="BRIDGE">
+                                <label for="bridge_loan_type">Bridge Loan Type <span class="required">*</span></label>
+                                <select id="bridge_loan_type" name="bridge_loan_type">
+                                    <option value="">Select</option>
+                                    <option value="Purchase Bridge">Purchase Bridge</option>
+                                    <option value="Refi Bridge">Refi Bridge</option>
+                                    <option value="Refi-Rehab">Refi-Rehab</option>
+                                </select>
+                            </div>
+
                             <!-- All loan types once selected -->
                             <div class="field-group field-full conditional-field" id="wrap_property_type" data-show-when="loan_type" data-show-values="FIX & FLIP,DSCR,BRIDGE,GROUND-UP CONSTRUCTION">
                                 <label for="property_type">Property Type <span class="required">*</span></label>
@@ -379,7 +390,7 @@
                                     <option value="Commercial">Commercial</option>
                                 </select>
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_number_of_units" data-show-when="property_type" data-show-values="Multifamily,2-4 units">
+                            <div class="field-group field-full conditional-field" id="wrap_number_of_units" data-show-when="property_type" data-show-values="Multifamily,2-4 units,5+ Units">
                                 <label for="number_of_units">Number of Units <span class="required">*</span></label>
                                 <input type="text" id="number_of_units" name="number_of_units">
                             </div>
@@ -416,27 +427,16 @@
                                 <input type="text" id="please_specify" name="please_specify">
                             </div>
 
-                            <!-- Bridge only (after Property Type, per layout) -->
-                            <div class="field-group field-full conditional-field" id="wrap_bridge_loan_type" data-show-when="loan_type" data-show-values="BRIDGE">
-                                <label for="bridge_loan_type">Bridge Loan Type <span class="required">*</span></label>
-                                <select id="bridge_loan_type" name="bridge_loan_type">
-                                    <option value="">Select</option>
-                                    <option value="Purchase Bridge">Purchase Bridge</option>
-                                    <option value="Refi Bridge">Refi Bridge</option>
-                                    <option value="Refi-Rehab">Refi-Rehab</option>
-                                </select>
-                            </div>
-
                             <!-- DSCR purchase / refi price label -->
                             <div class="field-group field-full conditional-field" id="wrap_purchase_price_original_if_refi" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="purchase_price_original_if_refi">Purchase Price (Original Purchase Price if Refi) <span class="required">*</span></label>
-                                <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi">
+                                <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi" placeholder="$">
                             </div>
 
                             <!-- Bridge Refi-Rehab: Original Purchase Price -->
                             <div class="field-group field-full conditional-field" id="wrap_original_purchase_price" data-show-when="bridge_loan_type" data-show-values="Refi-Rehab">
                                 <label for="original_purchase_price">Original Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="original_purchase_price" name="original_purchase_price">
+                                <input type="text" id="original_purchase_price" name="original_purchase_price" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi-Rehab">
                                 <label for="original_purchase_date">Original Purchase Date <span class="required">*</span></label>
@@ -445,7 +445,7 @@
                             <!-- Bridge Refi Bridge only: acquisition fields -->
                             <div class="field-group field-full conditional-field" id="wrap_original_acquisition_cost" data-show-when="bridge_loan_type" data-show-values="Refi Bridge">
                                 <label for="original_acquisition_cost">Original Acquisition Cost <span class="required">*</span></label>
-                                <input type="text" id="original_acquisition_cost" name="original_acquisition_cost">
+                                <input type="text" id="original_acquisition_cost" name="original_acquisition_cost" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_original_acquisition_date" data-show-when="bridge_loan_type" data-show-values="Refi Bridge">
                                 <label for="original_acquisition_date">Original Acquisition Date <span class="required">*</span></label>
@@ -462,15 +462,15 @@
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_purchase_price" data-show-any="loan_type:FIX & FLIP,GROUND-UP CONSTRUCTION|bridge_loan_type:Purchase Bridge">
                                 <label for="purchase_price">Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="purchase_price" name="purchase_price">
+                                <input type="text" id="purchase_price" name="purchase_price" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_rehab_budget" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
                                 <label for="rehab_budget">Rehab Budget <span class="required">*</span></label>
-                                <input type="text" id="rehab_budget" name="rehab_budget">
+                                <input type="text" id="rehab_budget" name="rehab_budget" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_arv" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
                                 <label for="arv">ARV (After Repair Value) <span class="required">*</span></label>
-                                <input type="text" id="arv" name="arv">
+                                <input type="text" id="arv" name="arv" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_exit_strategy" data-show-when="loan_type" data-show-values="FIX & FLIP">
                                 <label for="exit_strategy">Exit Strategy <span class="required">*</span></label>
@@ -480,15 +480,15 @@
                             <!-- GROUND-UP CONSTRUCTION (continued) -->
                             <div class="field-group field-full conditional-field" id="wrap_as_is_value" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="as_is_value">As-Is Value <span class="required">*</span></label>
-                                <input type="text" id="as_is_value" name="as_is_value">
+                                <input type="text" id="as_is_value" name="as_is_value" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_construction_budget" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="construction_budget">Construction Budget <span class="required">*</span></label>
-                                <input type="text" id="construction_budget" name="construction_budget">
+                                <input type="text" id="construction_budget" name="construction_budget" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_final_value" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="final_value">Final Value <span class="required">*</span></label>
-                                <input type="text" id="final_value" name="final_value">
+                                <input type="text" id="final_value" name="final_value" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_zoning_permit_status" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="zoning_permit_status">Zoning &amp; Permit Status <span class="required">*</span></label>
@@ -496,29 +496,29 @@
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_lot_purchase_price" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
                                 <label for="lot_purchase_price">Lot Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="lot_purchase_price" name="lot_purchase_price">
+                                <input type="text" id="lot_purchase_price" name="lot_purchase_price" placeholder="$">
                             </div>
 
                             <!-- DSCR (continued) -->
                             <div class="field-group field-full conditional-field" id="wrap_estimated_property_value" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="estimated_property_value">Estimated Property Value <span class="required">*</span></label>
-                                <input type="text" id="estimated_property_value" name="estimated_property_value">
+                                <input type="text" id="estimated_property_value" name="estimated_property_value" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_annual_insurance" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="annual_insurance">Annual Insurance <span class="required">*</span></label>
-                                <input type="text" id="annual_insurance" name="annual_insurance">
+                                <input type="text" id="annual_insurance" name="annual_insurance" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_annual_tax" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="annual_tax">Annual Tax <span class="required">*</span></label>
-                                <input type="text" id="annual_tax" name="annual_tax">
+                                <input type="text" id="annual_tax" name="annual_tax" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_monthly_rent" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="monthly_rent">Monthly Rent <span class="required">*</span></label>
-                                <input type="text" id="monthly_rent" name="monthly_rent">
+                                <input type="text" id="monthly_rent" name="monthly_rent" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_existing_mortgage" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="existing_mortgage">Existing Mortgage (put N/A if Purchase) <span class="required">*</span></label>
-                                <input type="text" id="existing_mortgage" name="existing_mortgage">
+                                <input type="text" id="existing_mortgage" name="existing_mortgage" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_occupancy" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="occupancy">Occupancy <span class="required">*</span></label>
@@ -538,7 +538,7 @@
                             <!-- BRIDGE (continued) -->
                             <div class="field-group field-full conditional-field" id="wrap_current_property_value" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="current_property_value">Current Property Value <span class="required">*</span></label>
-                                <input type="text" id="current_property_value" name="current_property_value">
+                                <input type="text" id="current_property_value" name="current_property_value" placeholder="$">
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_intended_exit" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="intended_exit">Intended Exit (Sale, Refi) <span class="required">*</span></label>
@@ -546,7 +546,7 @@
                             </div>
                             <div class="field-group field-full conditional-field" id="wrap_existing_loan_balance" data-show-when="loan_type" data-show-values="BRIDGE">
                                 <label for="existing_loan_balance">Existing Loan Balance (N/A if Purchase Bridge)</label>
-                                <input type="text" id="existing_loan_balance" name="existing_loan_balance">
+                                <input type="text" id="existing_loan_balance" name="existing_loan_balance" placeholder="$">
                             </div>
 
                             <div class="field-group field-full">

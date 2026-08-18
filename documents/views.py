@@ -447,7 +447,7 @@ def _opportunity_card_field_visible(key, form_data):
     bridge_type = _form_value(form_data, 'bridge_loan_type')
 
     if key == 'number_of_units':
-        return property_type in {'Multifamily', '2-4 units'}
+        return property_type in {'Multifamily', '2-4 units', '5+ Units'}
     if key in {
         'units_residential',
         'units_commercial',

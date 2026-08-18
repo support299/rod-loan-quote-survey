@@ -1614,18 +1614,12 @@ def create_needs_list_document(request, request_id):
         
         # Add document to print group
         document.print_groups.add(print_group)
-        
-        # Create admin selection for this needs list document
-        selection = AdminDocumentSelection.objects.create(
-            request=doc_request,
-            section_type='needs_list',
-            document=document,
-            print_group=print_group
-        )
+
+        # Do not create AdminDocumentSelection here — Send Request must attach
+        # a template from the existing catalog before the document is saved.
         
         return JsonResponse({
             'success': True,
-            'selection_id': selection.id,
             'document': {
                 'id': document.id,
                 'name': document.name,
@@ -1707,10 +1701,17 @@ def save_admin_selections(request, request_id):
         ghl_kw = {"access_token": ghl_ctx["access_token"]} if ghl_ctx else {}
         items_field_id, url_field_id = _resolve_needs_list_opportunity_field_ids(ghl_ctx)
         section_type = data.get('section_type')
-        document_ids = data.get('document_ids', [])
+        raw_document_ids = data.get('document_ids', [])
         print_group_id = data.get('print_group_id', None)
         # Map of document_id (str or int) -> template_id (needs_list + individual)
         templates_map = data.get('templates') or data.get('document_templates') or {}
+
+        document_ids = []
+        for raw_doc_id in raw_document_ids:
+            try:
+                document_ids.append(int(raw_doc_id))
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'Invalid document_ids'}, status=400)
         
         if not section_type or section_type not in ['adhoc', 'individual', 'needs_list']:
             return JsonResponse({'error': 'Invalid section_type. Must be: adhoc, individual, or needs_list'}, status=400)

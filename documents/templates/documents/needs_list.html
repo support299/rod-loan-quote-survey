@@ -423,6 +423,10 @@
             max-width: 420px;
         }
         .template-pick.show { display: flex; }
+        .template-pick.error .ss-trigger {
+            border-color: #c62828;
+            box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.15);
+        }
         .template-pick label {
             font-size: 12px;
             font-weight: 600;
@@ -709,6 +713,24 @@
             }
         }
 
+        function toDocId(id) {
+            const n = parseInt(id, 10);
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function isDocSelected(id) {
+            const n = toDocId(id);
+            return n != null && selectedDocuments.some(function (x) { return toDocId(x) === n; });
+        }
+
+        function getTemplateId(id) {
+            const n = toDocId(id);
+            if (n == null) return null;
+            const tid = selectedTemplates[n] || selectedTemplates[String(n)];
+            const parsed = parseInt(tid, 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+        }
+
         async function loadPrintGroups() {
             try {
                 const response = await fetch(withLocationQuery(`/api/print-groups/?request_id=${requestId}`));
@@ -869,7 +891,7 @@
                 filtered.forEach(function (t) {
                     const li = document.createElement('li');
                     li.textContent = t.name;
-                    if (String(t.id) === String(selectedTemplates[docId] || '')) {
+                    if (getTemplateId(docId) != null && String(t.id) === String(getTemplateId(docId))) {
                         li.classList.add('active');
                     }
                     li.addEventListener('click', function () {
@@ -962,8 +984,8 @@
             `;
 
             filtered.forEach(doc => {
-                const isSelected = selectedDocuments.includes(doc.id);
-                const tplId = selectedTemplates[doc.id] || '';
+                const isSelected = isDocSelected(doc.id);
+                const tplId = getTemplateId(doc.id) || '';
                 const item = document.createElement('div');
                 item.className = 'checkbox-item';
 
@@ -992,16 +1014,22 @@
             });
             
             // Select-all reflects currently visible docs only
-            const allChecked = filtered.length > 0 && filtered.every(doc => selectedDocuments.includes(doc.id));
+            const allChecked = filtered.length > 0 && filtered.every(doc => isDocSelected(doc.id));
             document.getElementById('select-all').checked = allChecked;
         }
 
         function setDocumentTemplate(docId, templateId) {
+            const n = toDocId(docId);
+            if (n == null) return;
             if (!templateId) {
-                delete selectedTemplates[docId];
+                delete selectedTemplates[n];
             } else {
-                selectedTemplates[docId] = parseInt(templateId, 10);
+                const tid = parseInt(templateId, 10);
+                if (Number.isFinite(tid) && tid > 0) selectedTemplates[n] = tid;
+                else delete selectedTemplates[n];
             }
+            const wrap = document.getElementById('tpl-wrap-' + n);
+            if (wrap) wrap.classList.toggle('error', !getTemplateId(n));
             saveActivePrintGroupState();
         }
 
@@ -1011,17 +1039,19 @@
             
             checkboxes.forEach(cb => {
                 cb.checked = selectAll.checked;
-                const docId = parseInt(cb.value);
+                const docId = toDocId(cb.value);
+                if (docId == null) return;
                 if (selectAll.checked) {
-                    if (!selectedDocuments.includes(docId)) {
+                    if (!isDocSelected(docId)) {
                         selectedDocuments.push(docId);
                     }
-                    const wrap = document.getElementById(`tpl-wrap-${docId}`);
+                    const wrap = document.getElementById('tpl-wrap-' + docId);
                     if (wrap) wrap.classList.add('show');
                 } else {
-                    selectedDocuments = selectedDocuments.filter(id => id !== docId);
+                    selectedDocuments = selectedDocuments.filter(function (id) { return toDocId(id) !== docId; });
                     delete selectedTemplates[docId];
-                    const wrap = document.getElementById(`tpl-wrap-${docId}`);
+                    delete selectedTemplates[String(docId)];
+                    const wrap = document.getElementById('tpl-wrap-' + docId);
                     if (wrap) wrap.classList.remove('show');
                 }
             });
@@ -1030,16 +1060,19 @@
         }
 
         function toggleDocument(docId) {
-            const checkbox = document.getElementById(`doc-${docId}`);
-            const wrap = document.getElementById(`tpl-wrap-${docId}`);
+            const n = toDocId(docId);
+            if (n == null) return;
+            const checkbox = document.getElementById('doc-' + n);
+            const wrap = document.getElementById('tpl-wrap-' + n);
             if (checkbox.checked) {
-                if (!selectedDocuments.includes(docId)) {
-                    selectedDocuments.push(docId);
+                if (!isDocSelected(n)) {
+                    selectedDocuments.push(n);
                 }
                 if (wrap) wrap.classList.add('show');
             } else {
-                selectedDocuments = selectedDocuments.filter(id => id !== docId);
-                delete selectedTemplates[docId];
+                selectedDocuments = selectedDocuments.filter(function (id) { return toDocId(id) !== n; });
+                delete selectedTemplates[n];
+                delete selectedTemplates[String(n)];
                 if (wrap) wrap.classList.remove('show');
                 document.getElementById('select-all').checked = false;
             }
@@ -1068,11 +1101,25 @@
                 showAlert('No templates available. Upload templates in Catalog Admin first.', 'error');
                 return;
             }
-            const missing = selectedDocuments.filter(function (id) {
-                return !selectedTemplates[id];
+            document.querySelectorAll('.template-pick.error').forEach(function (el) {
+                el.classList.remove('error');
+            });
+            const selectedIds = [];
+            selectedDocuments.forEach(function (id) {
+                const n = toDocId(id);
+                if (n != null && selectedIds.indexOf(n) === -1) selectedIds.push(n);
+            });
+            const missing = selectedIds.filter(function (id) {
+                return !getTemplateId(id);
             });
             if (missing.length) {
-                showAlert('Please choose a template file for every selected document before sending.', 'error');
+                missing.forEach(function (id) {
+                    const wrap = document.getElementById('tpl-wrap-' + id);
+                    if (wrap) wrap.classList.add('error');
+                });
+                showAlert('Please choose a template from the existing list for every selected document before sending.', 'error');
+                const first = document.getElementById('tpl-wrap-' + missing[0]);
+                if (first && first.scrollIntoView) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
 
@@ -1080,13 +1127,13 @@
             setButtonLoading(sendBtn, true);
 
             const templatesPayload = {};
-            selectedDocuments.forEach(function (id) {
-                templatesPayload[String(id)] = selectedTemplates[id];
+            selectedIds.forEach(function (id) {
+                templatesPayload[String(id)] = getTemplateId(id);
             });
 
             const payload = {
                 section_type: 'needs_list',
-                document_ids: selectedDocuments,
+                document_ids: selectedIds,
                 print_group_id: selectedPrintGroup,
                 templates: templatesPayload
             };
@@ -1154,10 +1201,9 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showAlert('Custom document created successfully!', 'success');
-                    // Add to documents and selected documents, then reload
+                    const newId = parseInt(result.document.id, 10);
                     const newDoc = {
-                        id: result.document.id,
+                        id: newId,
                         name: result.document.name,
                         description: result.document.description,
                         category: {
@@ -1166,11 +1212,22 @@
                         }
                     };
                     documents.push(newDoc);
-                    selectedDocuments.push(newDoc.id);
+                    if (!isDocSelected(newId)) {
+                        selectedDocuments.push(newId);
+                    }
+                    delete selectedTemplates[newId];
+                    delete selectedTemplates[String(newId)];
+                    const searchInput = document.getElementById('documents-search');
+                    if (searchInput) searchInput.value = '';
                     saveActivePrintGroupState();
                     renderDocuments();
                     syncSelectionBadges();
-                    // Reset form
+                    showAlert('Custom document added. Choose a template from the existing list before sending.', 'success');
+                    const wrap = document.getElementById('tpl-wrap-' + newId);
+                    if (wrap) {
+                        wrap.classList.add('error');
+                        if (wrap.scrollIntoView) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                     document.getElementById('custom-document-form').reset();
                 } else {
                     showAlert(result.error || 'Error creating custom document', 'error');

@@ -19,6 +19,7 @@ urlpatterns = [
     # API endpoints
     path('api/categories/', views.get_categories, name='categories'),
     path('api/categories/create/', views.create_category, name='create-category'),
+    path('api/categories/<int:category_id>/', views.delete_category, name='delete-category'),
     path('api/account/document-library/', views.account_document_library, name='account-document-library'),
     path('api/account/print-group-library/', views.account_print_group_library, name='account-print-group-library'),
     path('api/account/print-groups/create/', views.create_account_print_group, name='create-account-print-group'),

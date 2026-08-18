@@ -3,7 +3,7 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 import json
@@ -55,7 +55,9 @@ def get_categories(request):
       document enabled for that GHL subaccount.
     - include_empty: When 1/true, skip the "has visible docs" filter (needed for catalog admin).
     """
-    categories = Category.objects.select_related('request')
+    categories = Category.objects.select_related('request').annotate(
+        document_count=Count('documents')
+    )
     request_id = request.GET.get('request_id')
     doc_request = _document_request_by_url_id(request_id) if request_id else None
     account = resolve_account_for_request(request, doc_request=doc_request)
@@ -90,6 +92,7 @@ def get_categories(request):
             'id': category.id,
             'name': category.name,
             'description': category.description,
+            'document_count': getattr(category, 'document_count', 0),
             'created_at': category.created_at.isoformat() if category.created_at else None,
             'updated_at': category.updated_at.isoformat() if category.updated_at else None,
         }
@@ -147,6 +150,34 @@ def create_category(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_category(request, category_id):
+    """
+    Delete a catalog (global) category.
+    DELETE /api/categories/<category_id>/
+    Documents in the category are deleted with it (CASCADE).
+    """
+    try:
+        category = Category.objects.get(id=category_id)
+    except Category.DoesNotExist:
+        return JsonResponse({'error': 'Category not found'}, status=404)
+
+    if category.request_id:
+        return JsonResponse(
+            {'error': 'Request-scoped categories cannot be deleted from Catalog Admin'},
+            status=400,
+        )
+
+    doc_count = category.documents.count()
+    category.delete()
+    return JsonResponse({
+        'success': True,
+        'deleted': category_id,
+        'documents_deleted': doc_count,
+    })
 
 
 @require_http_methods(["GET"])

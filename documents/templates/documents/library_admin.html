@@ -355,7 +355,12 @@
             (data.categories || []).forEach(function (c) {
                 var item = document.createElement('div');
                 item.className = 'item';
-                item.innerHTML = '<div><h4>' + escapeHtml(c.name) + '</h4><p>' + escapeHtml(c.description || '') + '</p></div>';
+                var docCount = parseInt(c.document_count, 10) || 0;
+                item.innerHTML =
+                    '<div><h4>' + escapeHtml(c.name) + '</h4><p>' + escapeHtml(c.description || '') + '</p></div>' +
+                    '<button type="button" class="btn btn-danger" data-del-cat="' + c.id +
+                    '" data-name="' + escapeHtml(c.name) +
+                    '" data-doc-count="' + docCount + '">Delete</button>';
                 list.appendChild(item);
                 var opt = document.createElement('option');
                 opt.value = c.id;
@@ -365,6 +370,23 @@
             if (!(data.categories || []).length) {
                 list.innerHTML = '<div class="empty">No categories yet. Click Add Category to create one.</div>';
             }
+            list.querySelectorAll('[data-del-cat]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    var name = btn.getAttribute('data-name') || 'this category';
+                    var n = parseInt(btn.getAttribute('data-doc-count'), 10) || 0;
+                    var msg = n
+                        ? 'Delete "' + name + '"? This will also delete ' + n + ' document(s) in it.'
+                        : 'Delete category "' + name + '"?';
+                    if (!confirm(msg)) return;
+                    try {
+                        await api('/api/categories/' + btn.getAttribute('data-del-cat') + '/', {
+                            method: 'DELETE'
+                        });
+                        showAlert('Category deleted', true);
+                        await refreshAll();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
         }
 
         async function loadPrintGroups() {

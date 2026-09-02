@@ -822,7 +822,7 @@ def _create_survey_contact_note(request, submission, request_id, contact_id, acc
         view_url = request.build_absolute_uri(
             reverse("opportunity-submission-view", kwargs={"request_id": request_id})
         )
-        note_body = f"Loan Quote Survey Form - {submitted_date} - {view_url}"
+        note_body = f"Quick App Submission Form - {submitted_date} - {view_url}"
         result = create_contact_note(contact_id, note_body, **ghl_kw)
         note_id = (result.get("note") or {}).get("id") or result.get("id")
         if note_id:
@@ -963,9 +963,9 @@ def opportunity_card_form(request, request_id):
                 initial=submission.form_data or {},
                 success=True,
                 message=(
-                    'Loan Quote Survey submitted successfully.'
+                    'Quick App Submission Form submitted successfully.'
                     if created
-                    else 'Loan Quote Survey updated successfully.'
+                    else 'Quick App Submission Form updated successfully.'
                 ),
                 location_id=location_id or extract_location_id(request) or '',
             ),
@@ -980,7 +980,7 @@ def opportunity_card_form(request, request_id):
         pass
 
     success = request.GET.get('submitted') == '1'
-    message = 'Loan Quote Survey submitted successfully.' if success else ''
+    message = 'Quick App Submission Form submitted successfully.' if success else ''
 
     return render(
         request,
@@ -1063,7 +1063,7 @@ def download_opportunity_submission_pdf(request, request_id):
     )
 
     story = []
-    story.append(Paragraph(f"Loan Quote Survey Form – {html.escape(request_id)}", title_style))
+    story.append(Paragraph(f"Quick App Submission Form – {html.escape(request_id)}", title_style))
     story.append(Paragraph(f"Submitted: {submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission.submitted_at else '—'}", body_style))
     story.append(Spacer(1, 0.2 * inch))
 

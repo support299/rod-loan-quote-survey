@@ -98,7 +98,7 @@ def build_opportunity_name(form_data):
     address = (form_data.get("subject_property_address") or "").strip()
     if entity and address:
         return f"{entity} - {address}"
-    return entity or address or "Loan Quote Survey"
+    return entity or address or "Quick App Submission Form"
 
 
 def ensure_contact_and_opportunity(form_data, opportunity_id=None, account=None):

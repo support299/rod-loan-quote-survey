@@ -772,7 +772,7 @@ def _sync_needs_list_upload_status_to_ghl(request, doc_request, json_body=None):
 
 
 def _parse_opportunity_card_post(request):
-    """Parse Loan Quote Survey POST into cleaned form_data dict."""
+    """Parse Quick App Submission Form POST into cleaned form_data dict."""
     form_data = {}
     for key in OPPORTUNITY_CARD_FIELD_NAMES:
         if key == 'sms_consent':
@@ -781,7 +781,18 @@ def _parse_opportunity_card_post(request):
         if value is not None:
             form_data[key] = value.strip() if isinstance(value, str) else value
     form_data['sms_consent'] = 'Yes' if request.POST.get('sms_consent') else 'No'
+    # Phone kept natural; E.164 normalization in validate_contact_fields.
     return _strip_hidden_opportunity_card_fields(form_data)
+
+
+def _validate_contact_fields(form_data):
+    """
+    Validate contact full name, email, phone (libphonenumber → E.164).
+    :return: error message string or ''
+    """
+    from .contact_validation import validate_contact_fields
+
+    return validate_contact_fields(form_data)
 
 
 def _opportunity_card_form_context(
@@ -849,6 +860,10 @@ def _submit_loan_quote_survey(request, opportunity_id=None):
     from .survey_opportunity import ensure_contact_and_opportunity, get_default_ghl_account
 
     form_data = _parse_opportunity_card_post(request)
+    contact_err = _validate_contact_fields(form_data)
+    if contact_err:
+        return None, False, opportunity_id, '', contact_err
+
     account = get_default_ghl_account()
     if not account:
         return None, False, opportunity_id, '', 'GHL account is not configured.'

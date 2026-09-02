@@ -129,6 +129,8 @@
         .field-group label .required { color: #c62828; }
 
         .field-group input[type="text"],
+        .field-group input[type="email"],
+        .field-group input[type="tel"],
         .field-group input[type="number"],
         .field-group input[type="date"],
         .field-group select,
@@ -244,6 +246,23 @@
 
         .field-error { border-color: #c62828 !important; }
 
+        .field-hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .field-error-msg {
+            display: none;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #c62828;
+        }
+
+        .field-group.has-error .field-error-msg { display: block; }
+        .field-group.has-error .field-hint { display: none; }
+
         @media (max-width: 640px) {
             body { padding: 16px 12px 32px; }
             .form-header, .form-body { padding-left: 20px; padding-right: 20px; }
@@ -289,14 +308,18 @@
                             <div class="field-group field-full">
                                 <label for="full_name">Full Name <span class="required">*</span></label>
                                 <input type="text" id="full_name" name="full_name" placeholder="Full Name" required autocomplete="name">
+                                <span class="field-error-msg" data-error-for="full_name">Enter a valid name (letters; spaces and - ' . allowed)</span>
                             </div>
                             <div class="field-group field-full">
                                 <label for="email">Email <span class="required">*</span></label>
-                                <input type="email" id="email" name="email" placeholder="Email" required autocomplete="email">
+                                <input type="email" id="email" name="email" placeholder="name@example.com" required autocomplete="email" inputmode="email">
+                                <span class="field-hint">Enter a valid email address</span>
+                                <span class="field-error-msg" data-error-for="email">Enter a valid email address (e.g. name@example.com)</span>
                             </div>
                             <div class="field-group field-full">
                                 <label for="phone">Phone <span class="required">*</span></label>
-                                <input type="tel" id="phone" name="phone" placeholder="Phone" required autocomplete="tel">
+                                <input type="tel" id="phone" name="phone" placeholder="+1 555 123 4567" required autocomplete="tel" inputmode="tel">
+                                <span class="field-error-msg" data-error-for="phone">Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)</span>
                             </div>
                         </div>
                     </section>
@@ -686,6 +709,48 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
 
+            function normalizePhone(value) {
+                // Client keeps natural typing; server normalizes to E.164.
+                return String(value || '').trim();
+            }
+
+            function isValidFullName(value) {
+                // Unicode letters + marks; separators: space ' - . (one or more)
+                // Intent: ^[\p{L}\p{M}]+(?:[ '\-.]+[\p{L}\p{M}]+)*$
+                var name = String(value || '').trim().replace(/\s+/g, ' ');
+                if (!name || name.length > 200) return false;
+                try {
+                    return /^[\p{L}\p{M}]+(?:[ '\-.]+[\p{L}\p{M}]+)*$/u.test(name);
+                } catch (err) {
+                    // Older browsers without Unicode property escapes
+                    if (/[0-9]/.test(name)) return false;
+                    return /[A-Za-z\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF]/.test(name);
+                }
+            }
+
+            function isValidEmail(value) {
+                // Practical email check (not empty local/domain, has TLD)
+                return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || '').trim());
+            }
+
+            function isValidPhone(value) {
+                // Soft client check — allow +, digits, spaces, dashes, (), ext.
+                // Real validation + E.164 normalization happens on the server.
+                var raw = String(value || '').trim();
+                if (!raw) return false;
+                if (!/^[+\d\s\-().extEXT#]+$/.test(raw)) return false;
+                var digits = raw.replace(/\D/g, '');
+                // US 10 digits, or country code + national (E.164 up to 15)
+                return digits.length >= 10 && digits.length <= 15;
+            }
+
+            function setFieldError(el, invalid) {
+                if (!el || el.type === 'radio') return;
+                el.classList.toggle('field-error', !!invalid);
+                var group = el.closest('.field-group');
+                if (group) group.classList.toggle('has-error', !!invalid);
+            }
+
             function validateStep(step) {
                 var panel = form.querySelector('.form-step[data-step="' + step + '"]');
                 var ok = true;
@@ -698,8 +763,14 @@
                         if (!form.querySelector('[name="' + name + '"]:checked')) valid = false;
                     } else if (!el.value || !String(el.value).trim()) {
                         valid = false;
+                    } else if (el.name === 'full_name') {
+                        valid = isValidFullName(el.value);
+                    } else if (el.name === 'email' || el.type === 'email') {
+                        valid = isValidEmail(el.value);
+                    } else if (el.name === 'phone' || el.type === 'tel') {
+                        valid = isValidPhone(el.value);
                     }
-                    el.classList.toggle('field-error', !valid && el.type !== 'radio');
+                    setFieldError(el, !valid && el.type !== 'radio');
                     if (!valid) {
                         ok = false;
                         if (!firstBad) firstBad = el;
@@ -716,6 +787,35 @@
                 if (firstBad) firstBad.focus();
                 return ok;
             }
+
+            // Live clear / recheck contact fields while typing
+            ['full_name', 'email', 'phone'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('input', function() {
+                    if (!el.value.trim()) {
+                        setFieldError(el, false);
+                        return;
+                    }
+                    if (id === 'full_name') setFieldError(el, !isValidFullName(el.value));
+                    if (id === 'email') setFieldError(el, !isValidEmail(el.value));
+                    if (id === 'phone') setFieldError(el, !isValidPhone(el.value));
+                });
+                el.addEventListener('blur', function() {
+                    if (!el.value.trim()) return;
+                    if (id === 'full_name') setFieldError(el, !isValidFullName(el.value));
+                    if (id === 'email') setFieldError(el, !isValidEmail(el.value));
+                    if (id === 'phone') setFieldError(el, !isValidPhone(el.value));
+                });
+            });
+
+            // Normalize phone before submit (strip spaces/dashes)
+            form.addEventListener('submit', function() {
+                var phoneEl = document.getElementById('phone');
+                if (phoneEl && phoneEl.value) {
+                    phoneEl.value = normalizePhone(phoneEl.value);
+                }
+            }, true);
 
             document.getElementById('btn-next').addEventListener('click', function() {
                 if (!validateStep(currentStep)) return;

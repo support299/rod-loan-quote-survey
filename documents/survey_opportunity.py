@@ -124,6 +124,26 @@ def ensure_contact_and_opportunity(form_data, opportunity_id=None, account=None)
     if not full_name or not email or not phone:
         raise ValueError("Full Name, Email, and Phone are required.")
 
+    from documents.contact_validation import (
+        is_valid_email,
+        is_valid_full_name,
+        normalize_phone,
+    )
+
+    if not is_valid_full_name(full_name):
+        raise ValueError(
+            "Enter a valid name using letters "
+            "(spaces and - ' . allowed between name parts)."
+        )
+    if not is_valid_email(email):
+        raise ValueError("Enter a valid email address (e.g. name@example.com).")
+    phone = normalize_phone(phone)
+    if not phone:
+        raise ValueError(
+            "Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)."
+        )
+    form_data["phone"] = phone
+
     contact_result = upsert_contact_by_email_or_phone(
         location_id,
         full_name=full_name,

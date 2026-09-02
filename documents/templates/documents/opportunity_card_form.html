@@ -259,16 +259,20 @@
         <div class="form-card">
             <div class="form-header">
                 <h1>Loan Quote Survey Form</h1>
-                <p>Step <span id="step-label">1</span> of 3 — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
+                <p>Step <span id="step-label">1</span> of {{ total_steps|default:4 }} — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
                 <div class="step-indicator" aria-hidden="true">
                     <span class="step-dot active" data-step="1"></span>
                     <span class="step-dot" data-step="2"></span>
                     <span class="step-dot" data-step="3"></span>
+                    <span class="step-dot" data-step="4"></span>
                 </div>
             </div>
 
             {% if success %}
             <div class="success-message" role="alert">{{ message }}</div>
+            {% endif %}
+            {% if error %}
+            <div class="success-message" role="alert" style="background:#ffebee;color:#c62828;border-color:#ef9a9a;">{{ error }}</div>
             {% endif %}
 
             <form id="opportunity-form" class="form-body" method="post" action="" novalidate>
@@ -277,8 +281,29 @@
                 <input type="hidden" name="location_id" value="{{ location_id }}">
                 {% endif %}
 
-                <!-- Step 1 (image Slide 2) -->
+                <!-- Step 1: Contact Info -->
                 <div class="form-step active" data-step="1">
+                    <section class="section">
+                        <h2 class="section-title">Contact Info</h2>
+                        <div class="section-fields">
+                            <div class="field-group field-full">
+                                <label for="full_name">Full Name <span class="required">*</span></label>
+                                <input type="text" id="full_name" name="full_name" placeholder="Full Name" required autocomplete="name">
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="email">Email <span class="required">*</span></label>
+                                <input type="email" id="email" name="email" placeholder="Email" required autocomplete="email">
+                            </div>
+                            <div class="field-group field-full">
+                                <label for="phone">Phone <span class="required">*</span></label>
+                                <input type="tel" id="phone" name="phone" placeholder="Phone" required autocomplete="tel">
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Step 2: Applicant Info -->
+                <div class="form-step" data-step="2">
                     <section class="section">
                         <h2 class="section-title">Applicant Info</h2>
                         <div class="section-fields">
@@ -297,6 +322,9 @@
                                 <label for="account_executive">Account Executive <span class="required">*</span></label>
                                 <select id="account_executive" name="account_executive" required>
                                     <option value="">Preferred AE to handle your deal</option>
+                                    {% for ae in ae_options %}
+                                    <option value="{{ ae }}">{{ ae }}</option>
+                                    {% empty %}
                                     <option value="N/A">N/A</option>
                                     <option value="Anna">Anna</option>
                                     <option value="Adel">Adel</option>
@@ -304,6 +332,11 @@
                                     <option value="Howard">Howard</option>
                                     <option value="Marvin">Marvin</option>
                                     <option value="Ashley">Ashley</option>
+                                    <option value="Allison">Allison</option>
+                                    <option value="Josef">Josef</option>
+                                    <option value="Thomas">Thomas</option>
+                                    <option value="Larry">Larry</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div class="field-group field-full">
@@ -314,8 +347,8 @@
                     </section>
                 </div>
 
-                <!-- Step 2 (image Slide 3) -->
-                <div class="form-step" data-step="2">
+                <!-- Step 3: Borrower Experience -->
+                <div class="form-step" data-step="3">
                     <section class="section">
                         <h2 class="section-title">Borrower Experience</h2>
                         <div class="section-fields">
@@ -335,8 +368,8 @@
                     </section>
                 </div>
 
-                <!-- Step 3: Loan Info — fields depend on Loan Type -->
-                <div class="form-step" data-step="3">
+                <!-- Step 4: Loan Info — fields depend on Loan Type -->
+                <div class="form-step" data-step="4">
                     <section class="section">
                         <h2 class="section-title">Loan Info</h2>
                         <div class="section-fields">
@@ -572,7 +605,7 @@
         (function() {
             var form = document.getElementById('opportunity-form');
             var currentStep = 1;
-            var totalSteps = 3;
+            var totalSteps = {{ total_steps|default:4 }};
 
             function getTriggerValue(fieldName) {
                 var el = form.querySelector('[name="' + fieldName + '"]');

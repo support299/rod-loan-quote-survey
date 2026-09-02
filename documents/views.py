@@ -1,6 +1,6 @@
 from django.http import JsonResponse, Http404, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from django.db.models import Count, Q
@@ -286,13 +286,15 @@ def get_print_groups(request):
 
 
 # All form field names from opportunity card template (for saving)
-# Steps: 1 = applicant info, 2 = borrower experience, 3 = loan info
+# Steps: 1 = contact, 2 = applicant info, 3 = borrower experience, 4 = loan info
 OPPORTUNITY_CARD_FIELD_NAMES = [
-    # Step 1
-    'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
+    # Step 1 — Contact Info
+    'full_name', 'email', 'phone',
     # Step 2
-    'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
+    'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
     # Step 3
+    'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
+    # Step 4
     'subject_property_address', 'loan_type', 'dscr_loan_type', 'property_type',
     'units_residential', 'units_commercial', 'number_of_units', 'total_number_of_units',
     'residential_sqft_51_percent', 'commercial_property_type', 'please_specify', 'lot_owned',
@@ -305,8 +307,16 @@ OPPORTUNITY_CARD_FIELD_NAMES = [
     'sms_consent',
 ]
 
+OPPORTUNITY_CARD_AE_OPTIONS = [
+    'N/A', 'Anna', 'Adel', 'Rod', 'Howard', 'Marvin', 'Ashley',
+    'Allison', 'Josef', 'Thomas', 'Larry',
+]
+
 # Sections and labels for read-only view and PDF (section title, list of field keys)
 OPPORTUNITY_CARD_SECTIONS = [
+    ("Contact Info", [
+        'full_name', 'email', 'phone',
+    ]),
     ("Applicant Info", [
         'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
     ]),
@@ -327,6 +337,9 @@ OPPORTUNITY_CARD_SECTIONS = [
     ]),
 ]
 OPPORTUNITY_CARD_FIELD_LABELS = {
+    'full_name': 'Full Name',
+    'email': 'Email',
+    'phone': 'Phone',
     'entity_name': 'Entity Name',
     'broker_or_borrower': 'Are you a Broker or Direct Borrower?',
     'account_executive': 'Account Executive',
@@ -375,8 +388,9 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'sms_consent': 'SMS Consent',
 }
 
-# Always kept (steps 1–2 + step 3 shell).
+# Always kept (contact + applicant + experience + loan shell).
 OPPORTUNITY_CARD_ALWAYS_FIELDS = frozenset({
+    'full_name', 'email', 'phone',
     'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
     'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     'subject_property_address', 'loan_type', 'sms_consent',
@@ -757,74 +771,205 @@ def _sync_needs_list_upload_status_to_ghl(request, doc_request, json_body=None):
         )
 
 
+def _parse_opportunity_card_post(request):
+    """Parse Loan Quote Survey POST into cleaned form_data dict."""
+    form_data = {}
+    for key in OPPORTUNITY_CARD_FIELD_NAMES:
+        if key == 'sms_consent':
+            continue
+        value = request.POST.get(key)
+        if value is not None:
+            form_data[key] = value.strip() if isinstance(value, str) else value
+    form_data['sms_consent'] = 'Yes' if request.POST.get('sms_consent') else 'No'
+    return _strip_hidden_opportunity_card_fields(form_data)
+
+
+def _opportunity_card_form_context(
+    request_id=None,
+    initial=None,
+    success=False,
+    message='',
+    location_id='',
+    error='',
+    is_public=False,
+):
+    return {
+        'request_id': request_id or '',
+        'initial': initial or {},
+        'success': success,
+        'message': message,
+        'location_id': location_id or '',
+        'error': error or '',
+        'is_public': is_public,
+        'ae_options': OPPORTUNITY_CARD_AE_OPTIONS,
+        'total_steps': 4,
+    }
+
+
+def _create_survey_contact_note(request, submission, request_id, contact_id, access_token=None):
+    """Create GHL contact note once (skip if submission already has ghl_note_id)."""
+    if submission.ghl_note_id or not contact_id:
+        return
+    try:
+        from .ghl_service import create_contact_note
+
+        ghl_kw = {}
+        if access_token:
+            ghl_kw["access_token"] = access_token
+        else:
+            ghl_kw = _ghl_token_kwargs(request)
+        submitted_date = (submission.submitted_at or timezone.now()).strftime("%Y-%m-%d")
+        view_url = request.build_absolute_uri(
+            reverse("opportunity-submission-view", kwargs={"request_id": request_id})
+        )
+        note_body = f"Loan Quote Survey Form - {submitted_date} - {view_url}"
+        result = create_contact_note(contact_id, note_body, **ghl_kw)
+        note_id = (result.get("note") or {}).get("id") or result.get("id")
+        if note_id:
+            submission.ghl_note_id = note_id
+            submission.save(update_fields=["ghl_note_id"])
+    except Exception as e:
+        logger.warning(
+            "GHL note creation failed for opportunity %s: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+
+
+def _submit_loan_quote_survey(request, opportunity_id=None):
+    """
+    Shared submit path for public (/loan-quote-survey/) and bound (/{id}/opportunity-card/) forms.
+
+    - opportunity_id None → upsert contact + CREATE opportunity
+    - opportunity_id set  → upsert contact + UPDATE that opportunity
+
+    :return: (submission, created, opportunity_id, location_id, error_message)
+    """
+    from .survey_opportunity import ensure_contact_and_opportunity, get_default_ghl_account
+
+    form_data = _parse_opportunity_card_post(request)
+    account = get_default_ghl_account()
+    if not account:
+        return None, False, opportunity_id, '', 'GHL account is not configured.'
+
+    try:
+        ghl_summary = ensure_contact_and_opportunity(
+            form_data,
+            opportunity_id=opportunity_id,
+            account=account,
+        )
+    except Exception as e:
+        logger.exception(
+            "Loan Quote Survey contact/opportunity sync failed (opportunity_id=%s)",
+            opportunity_id,
+        )
+        return None, False, opportunity_id, account.location_id or '', str(e)
+
+    request_id = ghl_summary["opportunity_id"]
+    location_id = ghl_summary.get("location_id") or account.location_id or ''
+    contact_id = ghl_summary.get("contact_id")
+
+    submission, created = OpportunityCardSubmission.objects.update_or_create(
+        request_id=request_id,
+        defaults={'form_data': form_data},
+    )
+
+    _create_survey_contact_note(
+        request,
+        submission,
+        request_id,
+        contact_id,
+        access_token=account.access_token,
+    )
+
+    try:
+        from .tasks import enqueue_loan_quote_survey_ghl_sync
+        enqueue_loan_quote_survey_ghl_sync(request_id, location_id or None)
+    except Exception as e:
+        logger.warning(
+            "Loan Quote Survey GHL field sync failed for opportunity %s: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+
+    return submission, created, request_id, location_id, ''
+
+
+@csrf_exempt
+def loan_quote_survey_form(request):
+    """
+    Public Loan Quote Survey (website embed) — no opportunity id in URL.
+    URL: /loan-quote-survey/
+    POST always creates a NEW GHL opportunity, then redirects to
+    /{opportunity_id}/opportunity-card/ for future edits.
+    """
+    if request.method == 'POST':
+        submission, created, request_id, location_id, error = _submit_loan_quote_survey(
+            request, opportunity_id=None
+        )
+        if error or not request_id:
+            return render(
+                request,
+                'documents/opportunity_card_form.html',
+                _opportunity_card_form_context(
+                    initial=_parse_opportunity_card_post(request) if request.POST else {},
+                    location_id=location_id,
+                    error=error or 'Submission failed. Please try again.',
+                    is_public=True,
+                ),
+            )
+        # Bound URL for edits; flash success via query string
+        url = reverse('opportunity-card-form', kwargs={'request_id': request_id})
+        return redirect(f'{url}?submitted=1')
+
+    return render(
+        request,
+        'documents/opportunity_card_form.html',
+        _opportunity_card_form_context(is_public=True),
+    )
+
+
 @csrf_exempt
 def opportunity_card_form(request, request_id):
     """
     Opportunity Card – Loan Quote Survey Form with conditional fields.
     URL: {request_id}/opportunity-card/
     GET: show form (optionally pre-filled from existing submission).
-    POST: save form data to OpportunityCardSubmission and show success.
+    POST: upsert contact + update THIS opportunity, save submission.
     CSRF-exempt so the form works when embedded in an iframe on other origins (e.g. GoHighLevel).
-    Submissions are still scoped by unique request_id.
     """
     if request.method == 'POST':
-        form_data = {}
-        for key in OPPORTUNITY_CARD_FIELD_NAMES:
-            if key == 'sms_consent':
-                continue
-            value = request.POST.get(key)
-            if value is not None:
-                form_data[key] = value.strip() if isinstance(value, str) else value
-        form_data['sms_consent'] = 'Yes' if request.POST.get('sms_consent') else 'No'
-        # Skip values for fields hidden by loan/property conditionals (mirror template rules)
-        form_data = _strip_hidden_opportunity_card_fields(form_data)
-        submission, created = OpportunityCardSubmission.objects.update_or_create(
-            request_id=request_id,
-            defaults={'form_data': form_data}
+        submission, created, opp_id, location_id, error = _submit_loan_quote_survey(
+            request, opportunity_id=request_id
         )
-        location_id = extract_location_id(request) or ''
-        # Create note on GHL contact only if we don't already have one (avoid duplicate notes on resubmit)
-        if not submission.ghl_note_id:
-            try:
-                from .ghl_service import get_opportunity, create_contact_note
-                ghl_kw = _ghl_token_kwargs(request)
-                opp_data = get_opportunity(request_id, **ghl_kw)
-                opportunity = opp_data.get("opportunity") or {}
-                contact_id = opportunity.get("contactId")
-                if not location_id:
-                    location_id = opportunity.get("locationId") or ''
-                if contact_id:
-                    submitted_date = (submission.submitted_at or timezone.now()).strftime("%Y-%m-%d")
-                    view_url = request.build_absolute_uri(
-                        reverse("opportunity-submission-view", kwargs={"request_id": request_id})
-                    )
-                    note_body = f"Loan Quote Survey Form - {submitted_date} - {view_url}"
-                    result = create_contact_note(contact_id, note_body, **ghl_kw)
-                    note_id = (result.get("note") or {}).get("id") or result.get("id")
-                    if note_id:
-                        submission.ghl_note_id = note_id
-                        submission.save(update_fields=["ghl_note_id"])
-            except Exception as e:
-                logger.warning("GHL note creation failed for opportunity %s: %s", request_id, e, exc_info=True)
-        # Ensure contact custom fields exist + write survey values (Celery, inline fallback)
-        try:
-            from .tasks import enqueue_loan_quote_survey_ghl_sync
-            enqueue_loan_quote_survey_ghl_sync(request_id, location_id or None)
-        except Exception as e:
-            logger.warning(
-                "Loan Quote Survey GHL field sync failed for opportunity %s: %s",
-                request_id,
-                e,
-                exc_info=True,
+        if error or not submission:
+            return render(
+                request,
+                'documents/opportunity_card_form.html',
+                _opportunity_card_form_context(
+                    request_id=request_id,
+                    initial=_parse_opportunity_card_post(request),
+                    location_id=location_id or extract_location_id(request) or '',
+                    error=error or 'Submission failed. Please try again.',
+                ),
             )
-        context = {
-            'request_id': request_id,
-            'success': True,
-            'message': 'Loan Quote Survey submitted successfully.' if created else 'Loan Quote Survey updated successfully.',
-            'initial': submission.form_data or {},
-            'location_id': location_id or extract_location_id(request) or '',
-        }
-        return render(request, 'documents/opportunity_card_form.html', context)
+        return render(
+            request,
+            'documents/opportunity_card_form.html',
+            _opportunity_card_form_context(
+                request_id=opp_id or request_id,
+                initial=submission.form_data or {},
+                success=True,
+                message=(
+                    'Loan Quote Survey submitted successfully.'
+                    if created
+                    else 'Loan Quote Survey updated successfully.'
+                ),
+                location_id=location_id or extract_location_id(request) or '',
+            ),
+        )
 
     # GET: show form
     initial = {}
@@ -834,13 +979,20 @@ def opportunity_card_form(request, request_id):
     except OpportunityCardSubmission.DoesNotExist:
         pass
 
-    context = {
-        'request_id': request_id,
-        'initial': initial,
-        'success': False,
-        'location_id': extract_location_id(request) or '',
-    }
-    return render(request, 'documents/opportunity_card_form.html', context)
+    success = request.GET.get('submitted') == '1'
+    message = 'Loan Quote Survey submitted successfully.' if success else ''
+
+    return render(
+        request,
+        'documents/opportunity_card_form.html',
+        _opportunity_card_form_context(
+            request_id=request_id,
+            initial=initial,
+            success=success,
+            message=message,
+            location_id=extract_location_id(request) or '',
+        ),
+    )
 
 
 def _opportunity_submission_sections(form_data):

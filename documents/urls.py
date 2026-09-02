@@ -2,6 +2,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # Public Loan Quote Survey (website — no opportunity id)
+    path('loan-quote-survey/', views.loan_quote_survey_form, name='loan-quote-survey'),
     # Request-based URLs (with request_id)
     path('<str:request_id>/opportunity-card/', views.opportunity_card_form, name='opportunity-card-form'),
     path('<str:request_id>/opportunity-submission/', views.opportunity_submission_view, name='opportunity-submission-view'),

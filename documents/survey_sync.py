@@ -37,9 +37,13 @@ def _resolve_account(location_id=None, opportunity=None):
     loc = (location_id or "").strip() or None
     if not loc and opportunity:
         loc = (opportunity.get("locationId") or "").strip() or None
-    if not loc:
-        return None
-    return GHLAuthCredentials.objects.filter(location_id=loc).first()
+    if loc:
+        account = GHLAuthCredentials.objects.filter(location_id=loc).first()
+        if account:
+            return account
+    # Single-location install fallback
+    from documents.survey_opportunity import get_default_ghl_account
+    return get_default_ghl_account()
 
 
 def _name_index(fields):

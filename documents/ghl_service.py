@@ -270,3 +270,229 @@ def create_location_custom_field(
     resp.raise_for_status()
     data = resp.json() if resp.content else {}
     return data.get("customField") or data
+
+
+def _split_full_name(full_name):
+    """Split 'Full Name' into firstName / lastName for GHL contact payloads."""
+    parts = (full_name or "").strip().split(None, 1)
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], parts[1]
+
+
+def lookup_duplicate_contact(location_id, email=None, phone=None, access_token=None):
+    """
+    Find an existing contact by email or phone.
+    GET /contacts/search/duplicate?locationId=&email=&number=
+    :return: contact dict or None
+    """
+    headers = _auth_headers(access_token)
+    url = f"{GHL_CONTACTS_BASE}/search/duplicate"
+    params = {"locationId": location_id}
+    if email:
+        params["email"] = email
+    if phone:
+        params["number"] = phone
+    if "email" not in params and "number" not in params:
+        return None
+    resp = requests.get(url, headers=headers, params=params, timeout=30)
+    if resp.status_code in (400, 404, 422):
+        return None
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    contact = data.get("contact") or data.get("contacts")
+    if isinstance(contact, list):
+        return contact[0] if contact else None
+    return contact or None
+
+
+def create_contact(location_id, full_name=None, email=None, phone=None, access_token=None):
+    """
+    Create a GHL contact.
+    POST /contacts/
+    :return: contact dict (id, ...)
+    """
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    first_name, last_name = _split_full_name(full_name)
+    payload = {"locationId": location_id}
+    if first_name:
+        payload["firstName"] = first_name
+    if last_name:
+        payload["lastName"] = last_name
+    if full_name:
+        payload["name"] = (full_name or "").strip()
+    if email:
+        payload["email"] = email
+    if phone:
+        payload["phone"] = phone
+    resp = requests.post(GHL_CONTACTS_BASE + "/", headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("contact") or data
+
+
+def update_contact(contact_id, full_name=None, email=None, phone=None, access_token=None):
+    """
+    Update a GHL contact's standard fields.
+    PUT /contacts/{contactId}
+    :return: contact dict
+    """
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    payload = {}
+    if full_name is not None:
+        first_name, last_name = _split_full_name(full_name)
+        payload["name"] = (full_name or "").strip()
+        payload["firstName"] = first_name
+        payload["lastName"] = last_name
+    if email is not None:
+        payload["email"] = email
+    if phone is not None:
+        payload["phone"] = phone
+    if not payload:
+        return {}
+    url = f"{GHL_CONTACTS_BASE}/{contact_id}"
+    resp = requests.put(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("contact") or data
+
+
+def upsert_contact_by_email_or_phone(
+    location_id,
+    full_name=None,
+    email=None,
+    phone=None,
+    access_token=None,
+):
+    """
+    Create or update a contact. Match by email first, then phone.
+    :return: dict {contact, contact_id, created: bool}
+    """
+    email = (email or "").strip() or None
+    phone = (phone or "").strip() or None
+    full_name = (full_name or "").strip() or None
+
+    existing = None
+    if email:
+        try:
+            existing = lookup_duplicate_contact(
+                location_id, email=email, access_token=access_token
+            )
+        except Exception:
+            existing = None
+    if not existing and phone:
+        try:
+            existing = lookup_duplicate_contact(
+                location_id, phone=phone, access_token=access_token
+            )
+        except Exception:
+            existing = None
+
+    contact_id = (existing or {}).get("id") if existing else None
+    if contact_id:
+        contact = update_contact(
+            contact_id,
+            full_name=full_name,
+            email=email,
+            phone=phone,
+            access_token=access_token,
+        )
+        if not contact.get("id"):
+            contact = {**(existing or {}), **(contact or {}), "id": contact_id}
+        return {"contact": contact, "contact_id": contact_id, "created": False}
+
+    contact = create_contact(
+        location_id,
+        full_name=full_name,
+        email=email,
+        phone=phone,
+        access_token=access_token,
+    )
+    contact_id = contact.get("id")
+    if not contact_id:
+        raise RuntimeError(f"GHL create contact returned no id: {contact}")
+    return {"contact": contact, "contact_id": contact_id, "created": True}
+
+
+def list_pipelines(location_id, access_token=None):
+    """
+    List opportunity pipelines for a location.
+    GET /opportunities/pipelines?locationId=
+    :return: list of pipeline dicts (id, name, stages, ...)
+    """
+    headers = _auth_headers(access_token)
+    url = f"{GHL_OPPORTUNITIES_BASE}/pipelines"
+    resp = requests.get(url, headers=headers, params={"locationId": location_id}, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("pipelines") or []
+
+
+def create_opportunity(
+    location_id,
+    contact_id,
+    pipeline_id,
+    pipeline_stage_id,
+    name,
+    status="open",
+    access_token=None,
+):
+    """
+    Create a new GHL opportunity (always new — not upsert).
+    POST /opportunities/
+    :return: opportunity dict
+    """
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    payload = {
+        "locationId": location_id,
+        "contactId": contact_id,
+        "pipelineId": pipeline_id,
+        "pipelineStageId": pipeline_stage_id,
+        "name": name,
+        "status": status,
+    }
+    resp = requests.post(GHL_OPPORTUNITIES_BASE + "/", headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("opportunity") or data
+
+
+def update_opportunity(
+    opportunity_id,
+    name=None,
+    pipeline_id=None,
+    pipeline_stage_id=None,
+    contact_id=None,
+    status=None,
+    access_token=None,
+):
+    """
+    Update an existing GHL opportunity.
+    PUT /opportunities/{opportunityId}
+    :return: opportunity dict
+    """
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    payload = {}
+    if name is not None:
+        payload["name"] = name
+    if pipeline_id is not None:
+        payload["pipelineId"] = pipeline_id
+    if pipeline_stage_id is not None:
+        payload["pipelineStageId"] = pipeline_stage_id
+    if contact_id is not None:
+        payload["contactId"] = contact_id
+    if status is not None:
+        payload["status"] = status
+    if not payload:
+        return {}
+    url = f"{GHL_OPPORTUNITIES_BASE}/{opportunity_id}"
+    resp = requests.put(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("opportunity") or data

@@ -1288,12 +1288,12 @@ def admin_user_uploads_view(request, request_id):
         _link_doc_request_to_location(request, doc_request)
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id})
-    adhoc_docs, individual_docs, needs_list_docs = _build_request_document_data(doc_request)
+    loan_program_groups, individual_docs, _needs = _build_request_document_data(doc_request)
     context = {
         'request_id': request_id,
-        'adhoc_documents': adhoc_docs,
+        'loan_program_groups': loan_program_groups,
         'individual_documents': individual_docs,
-        'needs_list_documents': needs_list_docs,
+        'has_documents': bool(loan_program_groups) or bool(individual_docs),
     }
     return render(request, 'documents/admin_user_uploads.html', context)
 
@@ -1314,43 +1314,68 @@ def _serialize_user_upload(upload):
 
 
 def _build_request_document_data(doc_request):
-    """Build adhoc_docs, individual_docs, needs_list_docs for a document request (shared for PDF and pages)."""
-    selections = AdminDocumentSelection.objects.filter(
-        request=doc_request
-    ).exclude(section_type='needs_list').select_related(
-        'document', 'document__blank_template', 'print_group', 'template'
-    ).prefetch_related('user_uploads')
-    
-    adhoc_docs = []
+    """
+    Build upload/review document groups for a request.
+
+    Returns:
+      loan_program_groups: OrderedDict[program_name -> list[doc_data]]
+        Catalog docs sent via Select Loan Program + Send Request.
+      individual_docs: list[doc_data]
+        Custom one-off documents (request-scoped).
+      needs_list_docs: always {} (legacy compat; Needs List removed).
+    """
+    from collections import OrderedDict
+
+    selections = (
+        AdminDocumentSelection.objects.filter(request=doc_request)
+        .exclude(section_type="needs_list")
+        .select_related(
+            "document",
+            "document__category",
+            "document__blank_template",
+            "print_group",
+            "template",
+        )
+        .prefetch_related("user_uploads")
+        .order_by("created_at")
+    )
+
+    loan_program_groups = OrderedDict()
     individual_docs = []
-    needs_list_docs = {}
 
     for selection in selections:
         template = selection.template or (
-            selection.document.blank_template if selection.document.blank_template_id else None
+            selection.document.blank_template
+            if selection.document.blank_template_id
+            else None
         )
+        category = selection.document.category
+        program_name = (category.name if category else "") or "Loan Program"
         doc_data = {
-            'selection_id': selection.id,
-            'document_id': selection.document.id,
-            'document_name': selection.document.name,
-            'document_description': selection.document.description,
-            'attachment_mode': selection.document.attachment_mode,
-            'template_id': template.id if template else None,
-            'template_name': template.name if template else None,
-            'template_url': template.ghl_file_url if template else None,
-            'template_file_name': (template.file_name or template.name) if template else None,
-            'uploads': [
+            "selection_id": selection.id,
+            "document_id": selection.document.id,
+            "document_name": selection.document.name,
+            "document_description": selection.document.description,
+            "attachment_mode": selection.document.attachment_mode,
+            "loan_program": program_name,
+            "is_custom": bool(selection.document.request_id),
+            "template_id": template.id if template else None,
+            "template_name": template.name if template else None,
+            "template_url": template.ghl_file_url if template else None,
+            "template_file_name": (template.file_name or template.name) if template else None,
+            "uploads": [
                 _serialize_user_upload(upload)
                 for upload in selection.user_uploads.all()
-            ]
+            ],
         }
-        if selection.section_type == 'adhoc':
-            adhoc_docs.append(doc_data)
-        else:
-            # individual (and any other non-needs) show under individual list
-            individual_docs.append(doc_data)
 
-    return adhoc_docs, individual_docs, needs_list_docs
+        # Request-scoped custom docs → Individual; catalog → Loan Program groups
+        if selection.document.request_id:
+            individual_docs.append(doc_data)
+        else:
+            loan_program_groups.setdefault(program_name, []).append(doc_data)
+
+    return loan_program_groups, individual_docs, {}
 
 
 @require_http_methods(["GET"])
@@ -1366,7 +1391,7 @@ def download_request_pdf(request, request_id):
     except DocumentRequest.DoesNotExist:
         raise Http404("Request not found")
 
-    adhoc_docs, individual_docs, needs_list_docs = _build_request_document_data(doc_request)
+    loan_program_groups, individual_docs, needs_list_docs = _build_request_document_data(doc_request)
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -1414,10 +1439,9 @@ def download_request_pdf(request, request_id):
             story.append(Spacer(1, 0.1 * inch))
         story.append(Spacer(1, 0.15 * inch))
 
-    add_doc_list(adhoc_docs, "AD HOC Documents")
+    for program_name, docs in loan_program_groups.items():
+        add_doc_list(docs, f"Loan Program – {program_name}")
     add_doc_list(individual_docs, "Individual Documents")
-    for pg_name, docs in sorted(needs_list_docs.items()):
-        add_doc_list(docs, f"Needs List – {pg_name}")
 
     doc.build(story)
     buffer.seek(0)
@@ -1745,13 +1769,12 @@ def user_upload_page(request, request_id):
         _link_doc_request_to_location(request, doc_request)
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id, 'is_user_facing': True})
-    adhoc_docs, individual_docs, _needs_list_docs = _build_request_document_data(doc_request)
-    requested_documents = list(adhoc_docs) + list(individual_docs)
+    loan_program_groups, individual_docs, _needs = _build_request_document_data(doc_request)
     context = {
         'request_id': request_id,
-        'requested_documents': requested_documents,
-        'adhoc_documents': adhoc_docs,
+        'loan_program_groups': loan_program_groups,
         'individual_documents': individual_docs,
+        'has_documents': bool(loan_program_groups) or bool(individual_docs),
     }
     return render(request, 'documents/user_upload.html', context)
 
@@ -3108,12 +3131,11 @@ def user_documents_view(request, request_id):
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id, 'is_user_facing': True})
 
-    adhoc_docs, individual_docs, _needs_list_docs = _build_request_document_data(doc_request)
-    requested_documents = list(adhoc_docs) + list(individual_docs)
+    loan_program_groups, individual_docs, _needs = _build_request_document_data(doc_request)
     context = {
         'request_id': request_id,
-        'requested_documents': requested_documents,
-        'adhoc_documents': adhoc_docs,
+        'loan_program_groups': loan_program_groups,
         'individual_documents': individual_docs,
+        'has_documents': bool(loan_program_groups) or bool(individual_docs),
     }
     return render(request, 'documents/user_documents_view.html', context)

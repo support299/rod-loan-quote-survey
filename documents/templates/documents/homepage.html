@@ -250,8 +250,6 @@
         <div class="topbar">
             <div class="brand-kicker">Document requests</div>
             <div class="top-actions">
-                <a class="btn" href="#" id="btn-uploads">Review uploads</a>
-                <a class="btn" href="#" id="btn-client">Client upload link</a>
                 <a class="btn btn-dark" href="#" id="btn-catalog">+ Admin Catalog</a>
             </div>
         </div>
@@ -354,8 +352,6 @@
 
             document.getElementById("btn-catalog").href = preserve("/" + requestId + "/request/admin/library/");
             document.getElementById("btn-individual").href = preserve("/" + requestId + "/request/admin/individual-documents/");
-            document.getElementById("btn-uploads").href = preserve("/" + requestId + "/request/admin/uploads/");
-            document.getElementById("btn-client").href = preserve("/" + requestId + "/upload/");
 
             function rebuildRequestedIndex() {
                 requestedIds = {};

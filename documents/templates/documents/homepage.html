@@ -5,280 +5,314 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Request Documents</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Sans:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #0b3d91;
-            --accent: #1e88e5;
-            --accent-soft: #e3f2fd;
-            --border: #d6e4f0;
-            --text: #1a2332;
-            --muted: #5a6a7a;
-            --success: #1b7a4a;
-            --danger: #c62828;
-            --radius: 16px;
-            --shadow: 0 12px 40px rgba(11, 61, 145, 0.08);
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #e2e8f0;
+            --surface: #ffffff;
+            --bg: #f1f5f9;
+            --blue: #2563eb;
+            --blue-deep: #1d4ed8;
+            --blue-soft: #eff6ff;
+            --teal: #0f766e;
+            --teal-soft: #f0fdfa;
+            --amber: #b45309;
+            --amber-soft: #fffbeb;
+            --rose: #be123c;
+            --rose-soft: #fff1f2;
+            --green: #15803d;
+            --green-soft: #f0fdf4;
+            --radius: 20px;
+            --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 40px rgba(15, 23, 42, 0.06);
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-            background:
-                radial-gradient(1200px 600px at 10% -10%, #dcefff 0%, transparent 55%),
-                radial-gradient(900px 500px at 100% 0%, #eef6ff 0%, transparent 50%),
-                #f4f8fc;
+            font-family: "DM Sans", system-ui, sans-serif;
+            color: var(--ink);
             min-height: 100vh;
-            color: var(--text);
-            padding: 28px 16px 48px;
+            background:
+                radial-gradient(900px 420px at 0% 0%, #dbeafe 0%, transparent 55%),
+                radial-gradient(700px 380px at 100% 0%, #ccfbf1 0%, transparent 50%),
+                linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+            padding: 28px 16px 56px;
         }
-        .wrap { max-width: 880px; margin: 0 auto; }
+        .wrap { max-width: 1080px; margin: 0 auto; }
         .topbar {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 14px;
-        }
-        .admin-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            background: var(--primary);
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 650;
-            cursor: pointer;
-            text-decoration: none;
-            font-family: inherit;
-        }
-        .admin-btn:hover { background: #0a347c; }
-        .card {
-            background: #fff;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            border: 1px solid rgba(214, 228, 240, 0.9);
-            overflow: hidden;
-        }
-        .card-head {
-            padding: 28px 28px 18px;
-            border-bottom: 1px solid var(--border);
-            background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
-        }
-        .card-head h1 {
-            font-size: 28px;
-            font-weight: 750;
-            color: var(--primary);
-            letter-spacing: -0.03em;
-        }
-        .card-head p { margin-top: 6px; color: var(--muted); font-size: 14px; }
-        .card-body { padding: 24px 28px 28px; }
-        .field-label {
-            display: block;
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        select {
-            width: 100%;
-            padding: 12px 14px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            font-size: 15px;
-            font-family: inherit;
-            background: #fff;
-            color: var(--text);
-        }
-        select:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.15);
-        }
-        .docs-panel {
-            margin-top: 22px;
-            display: none;
-        }
-        .docs-panel.visible { display: block; }
-        .docs-toolbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-        .docs-toolbar h2 {
-            font-size: 15px;
+        .brand-kicker {
+            font-size: 12px;
             font-weight: 700;
-            color: var(--text);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--blue);
         }
-        .docs-toolbar button {
-            border: none;
-            background: transparent;
-            color: var(--accent);
-            font-weight: 650;
-            font-size: 13px;
+        .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--surface);
+            color: var(--ink);
+            font: 600 13px/1.2 "DM Sans", sans-serif;
             cursor: pointer;
-            font-family: inherit;
+            text-decoration: none;
+            transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
         }
-        .doc-list {
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(15,23,42,.08); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--blue), #3b82f6);
+            color: #fff;
+            border: none;
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+        }
+        .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-dark { background: var(--ink); color: #fff; border: none; }
+        .layout {
             display: grid;
-            gap: 10px;
-            max-height: 420px;
-            overflow: auto;
-            padding-right: 4px;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 18px;
+            align-items: start;
         }
-        .doc-item {
+        @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+        .panel {
+            background: var(--surface);
+            border: 1px solid rgba(226,232,240,.95);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .panel-head {
+            padding: 22px 22px 16px;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+        }
+        .panel-head h1, .panel-head h2 {
+            font-family: "Instrument Sans", "DM Sans", sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+        }
+        .panel-head p { margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+        .panel-body { padding: 18px 22px 22px; }
+        .field-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        select {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            font: 500 15px/1.2 "DM Sans", sans-serif;
+            background: #fff;
+            color: var(--ink);
+        }
+        select:focus {
+            outline: none;
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+        }
+        .docs-panel { display: none; margin-top: 18px; }
+        .docs-panel.visible { display: block; animation: rise .25s ease; }
+        @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .docs-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .docs-toolbar h3 { font-size: 14px; font-weight: 700; }
+        .linkish {
+            border: none; background: transparent; color: var(--blue);
+            font: 650 13px "DM Sans", sans-serif; cursor: pointer;
+        }
+        .doc-list, .requested-list { display: grid; gap: 10px; }
+        .doc-list { max-height: 380px; overflow: auto; padding-right: 2px; }
+        .doc-item, .req-item {
             display: flex;
             gap: 12px;
             align-items: flex-start;
-            padding: 14px 14px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: #fbfdff;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: #fcfdff;
+            transition: border-color .15s, background .15s, box-shadow .15s;
         }
-        .doc-item:hover { border-color: #90caf9; background: #fff; }
+        .doc-item { cursor: pointer; }
+        .doc-item:hover, .req-item:hover { border-color: #bfdbfe; background: #fff; }
         .doc-item.selected {
-            border-color: var(--accent);
-            background: var(--accent-soft);
-            box-shadow: 0 0 0 1px rgba(30, 136, 229, 0.2);
+            border-color: #60a5fa;
+            background: var(--blue-soft);
+            box-shadow: inset 0 0 0 1px rgba(37,99,235,.15);
         }
-        .doc-item input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); }
+        .doc-item input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--blue); }
         .doc-meta { flex: 1; min-width: 0; }
-        .doc-name { font-weight: 700; font-size: 14px; color: var(--text); }
+        .doc-name { font-weight: 700; font-size: 14px; }
         .doc-desc { margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.4; }
-        .badge {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 3px 8px;
+        .meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 9px;
             border-radius: 999px;
             font-size: 11px;
             font-weight: 700;
-            letter-spacing: 0.02em;
         }
-        .badge-template { background: #e8f5e9; color: #2e7d32; }
-        .badge-file { background: #eceff1; color: #455a64; }
-        .empty {
-            padding: 28px 16px;
-            text-align: center;
-            color: var(--muted);
-            border: 1px dashed var(--border);
-            border-radius: 12px;
-            font-size: 14px;
-        }
+        .chip-blue { background: var(--blue-soft); color: var(--blue-deep); }
+        .chip-teal { background: var(--teal-soft); color: var(--teal); }
+        .chip-slate { background: #f1f5f9; color: #475569; }
+        .chip-green { background: var(--green-soft); color: var(--green); }
+        .chip-amber { background: var(--amber-soft); color: var(--amber); }
+        .chip-rose { background: var(--rose-soft); color: var(--rose); }
         .actions {
-            margin-top: 20px;
+            margin-top: 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
         }
-        .btn {
-            padding: 12px 18px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            background: #fff;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: inherit;
-            text-decoration: none;
-            color: var(--text);
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #1565c0, #1e88e5);
-            color: #fff;
-            border: none;
-            box-shadow: 0 8px 20px rgba(30, 136, 229, 0.25);
-        }
-        .btn-primary:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        .btn-ghost { background: #fff; }
         .selected-count { font-size: 13px; color: var(--muted); font-weight: 600; }
         .alert {
             display: none;
             margin-top: 14px;
             padding: 12px 14px;
-            border-radius: 10px;
-            font-size: 14px;
+            border-radius: 12px;
+            font-size: 13px;
             font-weight: 600;
         }
         .alert.show { display: block; }
-        .alert.ok { background: #e8f5e9; color: var(--success); }
-        .alert.err { background: #ffebee; color: var(--danger); }
-        .custom-strip {
-            margin-top: 18px;
-            padding: 16px 18px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            background: linear-gradient(90deg, #f7fbff, #fff);
+        .alert.ok { background: var(--green-soft); color: var(--green); }
+        .alert.err { background: var(--rose-soft); color: var(--rose); }
+        .empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: var(--muted);
+            border: 1px dashed var(--line);
+            border-radius: 16px;
+            font-size: 14px;
+            background: #fafbfc;
+        }
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .stat {
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #f8fafc;
+            border: 1px solid var(--line);
+        }
+        .stat strong { display: block; font-size: 20px; font-weight: 750; letter-spacing: -0.03em; }
+        .stat span { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .custom-card {
+            margin-top: 14px;
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: linear-gradient(135deg, #f8fafc, #eff6ff);
             display: flex;
             justify-content: space-between;
-            align-items: center;
             gap: 12px;
+            align-items: center;
             flex-wrap: wrap;
         }
-        .custom-strip h3 { font-size: 14px; color: var(--primary); }
-        .custom-strip p { font-size: 13px; color: var(--muted); margin-top: 2px; }
-        @media (max-width: 640px) {
-            .card-head, .card-body { padding-left: 18px; padding-right: 18px; }
-        }
+        .custom-card h3 { font-size: 14px; font-weight: 700; }
+        .custom-card p { font-size: 13px; color: var(--muted); margin-top: 3px; }
+        .req-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+        .req-side .time { font-size: 11px; color: var(--muted); font-weight: 600; }
     </style>
     <script src="{% static 'documents/ghl_location.js' %}"></script>
 </head>
 <body>
     <div class="wrap">
         <div class="topbar">
-            <a class="admin-btn" href="#" id="btn-catalog">+ Admin Catalog Manager</a>
+            <div class="brand-kicker">Document requests</div>
+            <div class="top-actions">
+                <a class="btn" href="#" id="btn-uploads">Review uploads</a>
+                <a class="btn" href="#" id="btn-client">Client upload link</a>
+                <a class="btn btn-dark" href="#" id="btn-catalog">+ Admin Catalog</a>
+            </div>
         </div>
-        <div class="card">
-            <div class="card-head">
-                <h1>Request Documents</h1>
-                <p>Choose a loan program, select the documents to request, then send to the client.</p>
-            </div>
-            <div class="card-body">
-                <label class="field-label" for="loan-program">Select Loan Program</label>
-                <select id="loan-program">
-                    <option value="">Loading loan programs…</option>
-                </select>
 
-                <div class="docs-panel" id="docs-panel">
-                    <div class="docs-toolbar">
-                        <h2>Required documents</h2>
-                        <button type="button" id="btn-toggle-all">Select all</button>
+        <div class="layout">
+            <section class="panel">
+                <div class="panel-head">
+                    <h1>Request Documents</h1>
+                    <p>Pick a loan program, choose documents, and send the request to the client.</p>
+                </div>
+                <div class="panel-body">
+                    <label class="field-label" for="loan-program">Select loan program</label>
+                    <select id="loan-program">
+                        <option value="">Loading loan programs…</option>
+                    </select>
+
+                    <div class="docs-panel" id="docs-panel">
+                        <div class="docs-toolbar">
+                            <h3>Documents in this program</h3>
+                            <button type="button" class="linkish" id="btn-toggle-all">Select all</button>
+                        </div>
+                        <div class="doc-list" id="doc-list"></div>
+                        <div class="actions">
+                            <span class="selected-count" id="selected-count">0 selected</span>
+                            <button type="button" class="btn btn-primary" id="btn-send" disabled>Send Request</button>
+                        </div>
                     </div>
-                    <div class="doc-list" id="doc-list"></div>
-                    <div class="actions">
-                        <span class="selected-count" id="selected-count">0 selected</span>
-                        <button type="button" class="btn btn-primary" id="btn-send" disabled>Send Request</button>
+
+                    <div class="alert" id="alert" role="status"></div>
+
+                    <div class="custom-card">
+                        <div>
+                            <h3>Request Individual Documents</h3>
+                            <p>Create a one-off custom document for this opportunity.</p>
+                        </div>
+                        <a class="btn" href="#" id="btn-individual">Open custom docs →</a>
                     </div>
                 </div>
+            </section>
 
-                <div class="alert" id="alert" role="status"></div>
-
-                <div class="custom-strip">
-                    <div>
-                        <h3>Request Individual Documents</h3>
-                        <p>Create a one-off custom document for this opportunity.</p>
-                    </div>
-                    <a class="btn btn-ghost" href="#" id="btn-individual">Open custom docs →</a>
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Already requested</h2>
+                    <p>Documents already sent for this opportunity, with upload status.</p>
                 </div>
-            </div>
+                <div class="panel-body">
+                    <div class="stat-row">
+                        <div class="stat"><strong id="stat-total">0</strong><span>Requested</span></div>
+                        <div class="stat"><strong id="stat-uploads">0</strong><span>Uploads</span></div>
+                        <div class="stat"><strong id="stat-pending">0</strong><span>Pending review</span></div>
+                    </div>
+                    <div class="requested-list" id="requested-list"></div>
+                </div>
+            </section>
         </div>
     </div>
 
     <script>
         (function () {
             var requestId = "{{ request_id|escapejs }}";
+            var requestedDocs = {{ requested_documents_json|safe }};
             var loanSelect = document.getElementById("loan-program");
             var docsPanel = document.getElementById("docs-panel");
             var docList = document.getElementById("doc-list");
@@ -286,15 +320,20 @@
             var btnToggleAll = document.getElementById("btn-toggle-all");
             var selectedCount = document.getElementById("selected-count");
             var alertEl = document.getElementById("alert");
+            var requestedList = document.getElementById("requested-list");
             var currentDocs = [];
+            var requestedIds = {};
 
             function withLoc(url) {
-                if (typeof withLocationQuery === "function") return withLocationQuery(url);
-                return url;
+                return typeof withLocationQuery === "function" ? withLocationQuery(url) : url;
             }
             function preserve(path) {
-                if (typeof preserveQueryHref === "function") return preserveQueryHref(path);
-                return path + (window.location.search || "");
+                return typeof preserveQueryHref === "function" ? preserveQueryHref(path) : path + (window.location.search || "");
+            }
+            function escapeHtml(s) {
+                return String(s || "").replace(/[&<>"']/g, function (c) {
+                    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+                });
             }
             function showAlert(msg, ok) {
                 alertEl.textContent = msg;
@@ -304,9 +343,68 @@
                 alertEl.className = "alert";
                 alertEl.textContent = "";
             }
+            function formatDate(iso) {
+                if (!iso) return "";
+                try {
+                    return new Date(iso).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+                    });
+                } catch (e) { return ""; }
+            }
 
             document.getElementById("btn-catalog").href = preserve("/" + requestId + "/request/admin/library/");
             document.getElementById("btn-individual").href = preserve("/" + requestId + "/request/admin/individual-documents/");
+            document.getElementById("btn-uploads").href = preserve("/" + requestId + "/request/admin/uploads/");
+            document.getElementById("btn-client").href = preserve("/" + requestId + "/upload/");
+
+            function rebuildRequestedIndex() {
+                requestedIds = {};
+                (requestedDocs || []).forEach(function (d) { requestedIds[d.document_id] = true; });
+            }
+
+            function renderRequested() {
+                rebuildRequestedIndex();
+                var rows = requestedDocs || [];
+                var uploadTotal = 0;
+                var pendingTotal = 0;
+                rows.forEach(function (d) {
+                    uploadTotal += d.upload_count || 0;
+                    pendingTotal += d.pending_count || 0;
+                });
+                document.getElementById("stat-total").textContent = String(rows.length);
+                document.getElementById("stat-uploads").textContent = String(uploadTotal);
+                document.getElementById("stat-pending").textContent = String(pendingTotal);
+
+                if (!rows.length) {
+                    requestedList.innerHTML = '<div class="empty">No documents requested yet. Select a loan program and send a request.</div>';
+                    return;
+                }
+                requestedList.innerHTML = rows.map(function (d) {
+                    var chips = '';
+                    if (d.loan_program) chips += '<span class="chip chip-blue">' + escapeHtml(d.loan_program) + '</span>';
+                    chips += d.attachment_mode === "template"
+                        ? '<span class="chip chip-teal">Template</span>'
+                        : '<span class="chip chip-slate">File</span>';
+                    if (d.is_custom) chips += '<span class="chip chip-amber">Custom</span>';
+                    if (d.upload_count) chips += '<span class="chip chip-green">' + d.upload_count + ' upload' + (d.upload_count === 1 ? '' : 's') + '</span>';
+                    else chips += '<span class="chip chip-slate">Awaiting upload</span>';
+                    if (d.pending_count) chips += '<span class="chip chip-amber">' + d.pending_count + ' pending</span>';
+                    if (d.accepted_count) chips += '<span class="chip chip-green">' + d.accepted_count + ' accepted</span>';
+                    if (d.rejected_count) chips += '<span class="chip chip-rose">' + d.rejected_count + ' rejected</span>';
+                    return (
+                        '<div class="req-item">' +
+                            '<div class="doc-meta">' +
+                                '<div class="doc-name">' + escapeHtml(d.name) + '</div>' +
+                                (d.description ? '<div class="doc-desc">' + escapeHtml(d.description) + '</div>' : '') +
+                                '<div class="meta-row">' + chips + '</div>' +
+                            '</div>' +
+                            '<div class="req-side">' +
+                                '<span class="time">' + escapeHtml(formatDate(d.requested_at)) + '</span>' +
+                            '</div>' +
+                        '</div>'
+                    );
+                }).join("");
+            }
 
             function selectedIds() {
                 return Array.prototype.map.call(
@@ -331,18 +429,19 @@
                     return;
                 }
                 docList.innerHTML = currentDocs.map(function (d) {
-                    var mode = d.attachment_mode === "template" ? "template" : "file";
-                    var badge = mode === "template"
-                        ? '<span class="badge badge-template">Template download</span>'
-                        : '<span class="badge badge-file">Upload only</span>';
+                    var already = !!requestedIds[d.id];
+                    var badge = d.attachment_mode === "template"
+                        ? '<span class="chip chip-teal">Template download</span>'
+                        : '<span class="chip chip-slate">Upload only</span>';
+                    if (already) badge += ' <span class="chip chip-green">Already requested</span>';
                     var desc = (d.description || "").trim();
                     return (
                         '<label class="doc-item" data-id="' + d.id + '">' +
-                            '<input type="checkbox" value="' + d.id + '">' +
+                            '<input type="checkbox" value="' + d.id + '"' + (already ? ' checked' : '') + '>' +
                             '<div class="doc-meta">' +
                                 '<div class="doc-name"></div>' +
                                 (desc ? '<div class="doc-desc"></div>' : '') +
-                                badge +
+                                '<div class="meta-row">' + badge + '</div>' +
                             '</div>' +
                         '</label>'
                     );
@@ -353,6 +452,7 @@
                     var descEl = row.querySelector(".doc-desc");
                     if (descEl) descEl.textContent = d.description || "";
                     var cb = row.querySelector('input[type="checkbox"]');
+                    row.classList.toggle("selected", cb.checked);
                     cb.addEventListener("change", function () {
                         row.classList.toggle("selected", cb.checked);
                         refreshCount();
@@ -367,13 +467,12 @@
                     var res = await fetch(withLoc("/api/categories/?request_id=" + encodeURIComponent(requestId) + "&include_empty=1"));
                     var data = await res.json();
                     var cats = data.categories || [];
-                    loanSelect.innerHTML = '<option value="">Select a loan program…</option>' +
-                        cats.map(function (c) {
-                            return '<option value="' + c.id + '"></option>';
-                        }).join("");
-                    Array.prototype.forEach.call(loanSelect.options, function (opt, i) {
-                        if (i === 0) return;
-                        opt.textContent = cats[i - 1].name;
+                    loanSelect.innerHTML = '<option value="">Select a loan program…</option>';
+                    cats.forEach(function (c) {
+                        var opt = document.createElement("option");
+                        opt.value = c.id;
+                        opt.textContent = c.name;
+                        loanSelect.appendChild(opt);
                     });
                 } catch (e) {
                     loanSelect.innerHTML = '<option value="">Failed to load loan programs</option>';
@@ -403,10 +502,7 @@
                 }
             }
 
-            loanSelect.addEventListener("change", function () {
-                loadDocs(loanSelect.value);
-            });
-
+            loanSelect.addEventListener("change", function () { loadDocs(loanSelect.value); });
             btnToggleAll.addEventListener("click", function () {
                 var boxes = docList.querySelectorAll('input[type="checkbox"]');
                 var allChecked = Array.prototype.every.call(boxes, function (b) { return b.checked; });
@@ -433,7 +529,32 @@
                     });
                     var data = await res.json();
                     if (!res.ok) throw new Error(data.error || "Send failed");
-                    showAlert("Request sent. Client upload link is ready for this opportunity.", true);
+
+                    // Merge newly sent docs into Already requested list
+                    var nowIso = new Date().toISOString();
+                    (data.selections || []).forEach(function (sel) {
+                        var existing = requestedDocs.find(function (r) { return r.document_id === sel.document_id; });
+                        if (existing) return;
+                        var src = currentDocs.find(function (d) { return d.id === sel.document_id; });
+                        requestedDocs.unshift({
+                            selection_id: sel.id,
+                            document_id: sel.document_id,
+                            name: sel.document_name || (src && src.name) || "Document",
+                            description: (src && src.description) || "",
+                            loan_program: (src && src.category && src.category.name) || (loanSelect.options[loanSelect.selectedIndex] && loanSelect.options[loanSelect.selectedIndex].text) || "",
+                            attachment_mode: (src && src.attachment_mode) || "file",
+                            is_custom: false,
+                            template_url: null,
+                            upload_count: 0,
+                            accepted_count: 0,
+                            pending_count: 0,
+                            rejected_count: 0,
+                            requested_at: nowIso
+                        });
+                    });
+                    renderRequested();
+                    renderDocs(currentDocs);
+                    showAlert("Request sent. Client can upload from the upload link.", true);
                 } catch (e) {
                     showAlert(e.message || "Send failed", false);
                 } finally {
@@ -442,6 +563,7 @@
                 }
             });
 
+            renderRequested();
             loadPrograms();
         })();
     </script>

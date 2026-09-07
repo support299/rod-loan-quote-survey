@@ -617,6 +617,142 @@ def _resolve_needs_list_opportunity_field_ids(ctx):
     )
 
 
+def _sync_requested_documents_to_ghl(request, doc_request, request_id, json_body=None, ghl_ctx=None):
+    """
+    Push the full requested-document list + upload URL to GHL opportunity fields
+    and create/update the contact note. Failures are logged only.
+    """
+    try:
+        from .ghl_service import (
+            get_opportunity,
+            create_contact_note,
+            update_contact_custom_field,
+            update_contact_note,
+            update_opportunity_custom_fields,
+        )
+
+        if ghl_ctx is None:
+            ghl_ctx = _resolve_ghl_context(
+                request, json_body=json_body, doc_request=doc_request
+            )
+        ghl_kw = {"access_token": ghl_ctx["access_token"]} if ghl_ctx else {}
+        items_field_id, url_field_id = _resolve_needs_list_opportunity_field_ids(ghl_ctx)
+
+        all_selections = (
+            AdminDocumentSelection.objects.filter(
+                request=doc_request,
+                section_type__in=["individual", "adhoc"],
+            )
+            .select_related("document")
+            .order_by("created_at")
+        )
+
+        names = []
+        seen = set()
+        for sel in all_selections:
+            name = (sel.document.name or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+
+        custom_fields = []
+        upload_url = f"https://survey.flipfunding.com/{request_id}/upload/"
+
+        if names and items_field_id:
+            doc_list_value = "\n".join(
+                [f"{i}. {name}" for i, name in enumerate(names, start=1)]
+            )
+            custom_fields.append(
+                {
+                    "id": items_field_id,
+                    "field_value": doc_list_value,
+                }
+            )
+
+        if url_field_id:
+            custom_fields.append(
+                {
+                    "id": url_field_id,
+                    "field_value": upload_url,
+                }
+            )
+
+        if custom_fields:
+            update_opportunity_custom_fields(request_id, custom_fields, **ghl_kw)
+
+        note_parts = []
+        if names:
+            doc_list_value = "\n".join(
+                [f"{i}. {name}" for i, name in enumerate(names, start=1)]
+            )
+            note_parts.append(doc_list_value)
+        note_parts.append("Upload link: " + upload_url)
+        note_body = "\n\n".join(note_parts)
+
+        contact_id = None
+        try:
+            opp_data = get_opportunity(request_id, **ghl_kw)
+            opportunity = opp_data.get("opportunity") or {}
+            contact_id = opportunity.get("contactId")
+        except Exception as opp_err:
+            logger.warning(
+                "Failed to fetch GHL opportunity for contact sync (request %s): %s",
+                request_id,
+                opp_err,
+                exc_info=True,
+            )
+
+        if contact_id:
+            try:
+                if doc_request.ghl_needs_list_note_id:
+                    update_contact_note(
+                        contact_id,
+                        doc_request.ghl_needs_list_note_id,
+                        note_body,
+                        **ghl_kw,
+                    )
+                else:
+                    result = create_contact_note(contact_id, note_body, **ghl_kw)
+                    note_id = (result.get("note") or {}).get("id") or result.get("id")
+                    if note_id:
+                        doc_request.ghl_needs_list_note_id = note_id
+                        doc_request.save(update_fields=["ghl_needs_list_note_id"])
+            except Exception as note_err:
+                logger.warning(
+                    "Failed to create/update GHL document request note for request %s: %s",
+                    request_id,
+                    note_err,
+                    exc_info=True,
+                )
+
+            send_needs_field_id = _resolve_contact_custom_field_id(
+                ghl_ctx, "Send Needs List"
+            )
+            if send_needs_field_id:
+                try:
+                    update_contact_custom_field(
+                        contact_id,
+                        send_needs_field_id,
+                        note_body,
+                        **ghl_kw,
+                    )
+                except Exception as cf_err:
+                    logger.warning(
+                        "Failed to update GHL contact custom field Send Needs List for request %s: %s",
+                        request_id,
+                        cf_err,
+                        exc_info=True,
+                    )
+    except Exception as e:
+        logger.warning(
+            "Failed to sync requested documents to GHL for request %s: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+
+
 def _resolve_contact_custom_field_id(ctx, field_name):
     """
     Resolve a contact custom field GHL id from GHLCustomField for this account (by field_name).
@@ -1076,17 +1212,51 @@ def download_opportunity_submission_pdf(request, request_id):
 
 def homepage(request, request_id):
     """
-    Homepage view with 3 card options for admin
+    Request Documents homepage: loan-program picker + already-requested list.
     """
-    # Get or create the document request
-    doc_request, created = DocumentRequest.objects.get_or_create(request_id=request_id)
+    doc_request, _created = DocumentRequest.objects.get_or_create(request_id=request_id)
     _link_doc_request_to_location(request, doc_request)
-    
+
+    selections = (
+        AdminDocumentSelection.objects.filter(request=doc_request)
+        .exclude(section_type="needs_list")
+        .select_related("document", "document__category", "document__blank_template", "template")
+        .prefetch_related("user_uploads")
+        .order_by("-created_at")
+    )
+    requested = []
+    for sel in selections:
+        uploads = list(sel.user_uploads.all())
+        accepted = sum(1 for u in uploads if u.accepted)
+        pending = sum(1 for u in uploads if not u.accepted and not (u.rejection_reason or "").strip())
+        rejected = sum(1 for u in uploads if (u.rejection_reason or "").strip() and not u.accepted)
+        tpl = sel.template or (
+            sel.document.blank_template if sel.document.blank_template_id else None
+        )
+        requested.append(
+            {
+                "selection_id": sel.id,
+                "document_id": sel.document_id,
+                "name": sel.document.name,
+                "description": sel.document.description or "",
+                "loan_program": sel.document.category.name if sel.document.category_id else "",
+                "attachment_mode": sel.document.attachment_mode,
+                "is_custom": bool(sel.document.request_id),
+                "template_url": tpl.ghl_file_url if tpl else None,
+                "upload_count": len(uploads),
+                "accepted_count": accepted,
+                "pending_count": pending,
+                "rejected_count": rejected,
+                "requested_at": sel.created_at.isoformat() if sel.created_at else None,
+            }
+        )
+
     context = {
-        'request_id': request_id,
-        'location_id': extract_location_id(request) or '',
+        "request_id": request_id,
+        "location_id": extract_location_id(request) or "",
+        "requested_documents_json": json.dumps(requested),
     }
-    return render(request, 'documents/homepage.html', context)
+    return render(request, "documents/homepage.html", context)
 
 
 def library_admin_page(request, request_id):
@@ -1575,12 +1745,13 @@ def user_upload_page(request, request_id):
         _link_doc_request_to_location(request, doc_request)
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id, 'is_user_facing': True})
-    adhoc_docs, individual_docs, needs_list_docs = _build_request_document_data(doc_request)
+    adhoc_docs, individual_docs, _needs_list_docs = _build_request_document_data(doc_request)
+    requested_documents = list(adhoc_docs) + list(individual_docs)
     context = {
         'request_id': request_id,
+        'requested_documents': requested_documents,
         'adhoc_documents': adhoc_docs,
         'individual_documents': individual_docs,
-        'needs_list_documents': needs_list_docs,
     }
     return render(request, 'documents/user_upload.html', context)
 
@@ -1725,6 +1896,11 @@ def create_individual_document(request, request_id):
             section_type="individual",
             document=document,
             template=blank_template,
+        )
+
+        # Refresh GHL note / opportunity fields so custom docs appear immediately
+        _sync_requested_documents_to_ghl(
+            request, doc_request, request_id, json_body=data
         )
 
         return JsonResponse(
@@ -1917,8 +2093,6 @@ def save_admin_selections(request, request_id):
         data = json.loads(request.body)
         _link_doc_request_to_location(request, doc_request, json_body=data)
         ghl_ctx = _resolve_ghl_context(request, json_body=data, doc_request=doc_request)
-        ghl_kw = {"access_token": ghl_ctx["access_token"]} if ghl_ctx else {}
-        items_field_id, url_field_id = _resolve_needs_list_opportunity_field_ids(ghl_ctx)
         section_type = data.get('section_type')
         raw_document_ids = data.get('document_ids', [])
         print_group_id = data.get('print_group_id', None)
@@ -2080,136 +2254,13 @@ def save_admin_selections(request, request_id):
                     'template_id': selection.template_id,
                 })
 
-        # After saving, update the configured GHL opportunity custom fields with:
-        # 1) a numbered list of all selected document names for this request
-        # 2) the upload link URL we send to the user (based on request_id)
-        # (individual + needs list). Failures here should not block the API.
-        try:
-            from .ghl_service import (
-                get_opportunity,
-                create_contact_note,
-                update_contact_custom_field,
-                update_contact_note,
-                update_opportunity_custom_fields,
-            )
-
-            # Collect all selected document names for this request
-            all_selections = AdminDocumentSelection.objects.filter(
-                request=doc_request,
-                section_type__in=['individual', 'needs_list'],
-            ).select_related('document').order_by('created_at')
-
-            names = []
-            seen = set()
-            for sel in all_selections:
-                name = (sel.document.name or "").strip()
-                if not name or name in seen:
-                    continue
-                seen.add(name)
-                names.append(name)
-
-            custom_fields = []
-            upload_url = f"https://survey.flipfunding.com/{request_id}/upload/"
-
-            # Needs List Items – only if we have at least one name
-            if names and items_field_id:
-                doc_list_value = "\n".join(
-                    [f"{i}. {name}" for i, name in enumerate(names, start=1)]
-                )
-                custom_fields.append(
-                    {
-                        "id": items_field_id,
-                        "field_value": doc_list_value,
-                    }
-                )
-
-            # Needs List Url – always send if we have a field ID configured
-            if url_field_id:
-                custom_fields.append(
-                    {
-                        "id": url_field_id,
-                        "field_value": upload_url,
-                    }
-                )
-
-            if custom_fields:
-                # request_id here is the GHL opportunity ID in your URLs
-                update_opportunity_custom_fields(request_id, custom_fields, **ghl_kw)
-
-            # Create or update GHL contact note with the same needs list data
-            # (document list + upload link). Use saved note ID to update on subsequent changes.
-            note_parts = []
-            if names:
-                doc_list_value = "\n".join(
-                    [f"{i}. {name}" for i, name in enumerate(names, start=1)]
-                )
-                # note_parts.append("Needs List\n\n" + doc_list_value)
-                note_parts.append(doc_list_value)
-            note_parts.append("Upload link: " + upload_url)
-            note_body = "\n\n".join(note_parts)
-
-            contact_id = None
-            try:
-                opp_data = get_opportunity(request_id, **ghl_kw)
-                opportunity = opp_data.get("opportunity") or {}
-                contact_id = opportunity.get("contactId")
-            except Exception as opp_err:
-                logger.warning(
-                    "Failed to fetch GHL opportunity for contact sync (request %s): %s",
-                    request_id,
-                    opp_err,
-                    exc_info=True,
-                )
-
-            if contact_id:
-                try:
-                    if doc_request.ghl_needs_list_note_id:
-                        update_contact_note(
-                            contact_id,
-                            doc_request.ghl_needs_list_note_id,
-                            note_body,
-                            **ghl_kw,
-                        )
-                    else:
-                        result = create_contact_note(contact_id, note_body, **ghl_kw)
-                        note_id = (result.get("note") or {}).get("id") or result.get("id")
-                        if note_id:
-                            doc_request.ghl_needs_list_note_id = note_id
-                            doc_request.save(update_fields=["ghl_needs_list_note_id"])
-                except Exception as note_err:
-                    logger.warning(
-                        "Failed to create/update GHL needs list note for request %s: %s",
-                        request_id,
-                        note_err,
-                        exc_info=True,
-                    )
-
-                send_needs_field_id = _resolve_contact_custom_field_id(
-                    ghl_ctx, "Send Needs List"
-                )
-                if send_needs_field_id:
-                    try:
-                        update_contact_custom_field(
-                            contact_id,
-                            send_needs_field_id,
-                            note_body,
-                            **ghl_kw,
-                        )
-                    except Exception as cf_err:
-                        logger.warning(
-                            "Failed to update GHL contact custom field Send Needs List for request %s: %s",
-                            request_id,
-                            cf_err,
-                            exc_info=True,
-                        )
-        except Exception as e:
-            logger.warning(
-                "Failed to update GHL custom field for request %s: %s",
-                request_id,
-                e,
-                exc_info=True,
-            )
-
+        _sync_requested_documents_to_ghl(
+            request,
+            doc_request,
+            request_id,
+            json_body=data,
+            ghl_ctx=ghl_ctx,
+        )
         _sync_needs_list_upload_status_to_ghl(request, doc_request, json_body=data)
 
         return JsonResponse({
@@ -3057,11 +3108,12 @@ def user_documents_view(request, request_id):
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id, 'is_user_facing': True})
 
-    adhoc_docs, individual_docs, needs_list_docs = _build_request_document_data(doc_request)
+    adhoc_docs, individual_docs, _needs_list_docs = _build_request_document_data(doc_request)
+    requested_documents = list(adhoc_docs) + list(individual_docs)
     context = {
         'request_id': request_id,
+        'requested_documents': requested_documents,
         'adhoc_documents': adhoc_docs,
         'individual_documents': individual_docs,
-        'needs_list_documents': needs_list_docs,
     }
     return render(request, 'documents/user_documents_view.html', context)

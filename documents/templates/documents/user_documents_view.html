@@ -389,87 +389,13 @@
         </div>
 
         <div class="content">
-            {% if adhoc_documents or individual_documents or needs_list_documents %}
-            {% comment %} Calculate stats {% endcomment %}
-            {% with total_uploads=0 accepted_uploads=0 %}
-                {% for doc in adhoc_documents %}
-                    {% for upload in doc.uploads %}
-                        {% if forloop.parentloop.first and forloop.first %}{% with total_uploads=total_uploads|add:1 %}{% endwith %}{% endif %}
-                        {% if upload.accepted %}{% with accepted_uploads=accepted_uploads|add:1 %}{% endwith %}{% endif %}
-                    {% endfor %}
-                {% endfor %}
-                {% for doc in individual_documents %}
-                    {% for upload in doc.uploads %}
-                        {% if forloop.parentloop.first and forloop.first %}{% with total_uploads=total_uploads|add:1 %}{% endwith %}{% endif %}
-                        {% if upload.accepted %}{% with accepted_uploads=accepted_uploads|add:1 %}{% endwith %}{% endif %}
-                    {% endfor %}
-                {% endfor %}
-                {% for print_group_name, documents in needs_list_documents.items %}
-                    {% for doc in documents %}
-                        {% for upload in doc.uploads %}
-                            {% if forloop.parentloop.parentloop.first and forloop.parentloop.first and forloop.first %}{% with total_uploads=total_uploads|add:1 %}{% endwith %}{% endif %}
-                            {% if upload.accepted %}{% with accepted_uploads=accepted_uploads|add:1 %}{% endwith %}{% endif %}
-                        {% endfor %}
-                    {% endfor %}
-                {% endfor %}
-            {% endwith %}
-
-            <!-- <div class="section">
-                <div class="section-title" onclick="toggleSection(this)">
-                    <span>AD HOC Documents</span>
-                </div>
-                <div class="section-content {% if not adhoc_documents %}collapsed{% endif %}">
-            {% if adhoc_documents %}
-                {% for doc in adhoc_documents %}
-                <div class="document-card">
-                    <div class="document-header" onclick="toggleDocument(this)">
-                        <div>
-                            <div class="document-name">{{ doc.document_name }}</div>
-                            <div class="document-description">{{ doc.document_description }}</div>
-                        </div>
-                    </div>
-                    <div class="document-content">
-                    <div class="uploaded-files">
-                        {% for upload in doc.uploads %}
-                        <div class="uploaded-file {% if upload.accepted %}accepted{% endif %}">
-                            <div class="file-info">
-                                <div class="file-icon">📎</div>
-                                <div class="file-details">
-                                    <div class="file-name">{{ upload.file_name }}</div>
-                                    <div class="file-date">Uploaded: {{ upload.uploaded_at|date:"M d, Y H:i" }}</div>
-                                    {% if upload.accepted %}
-                                    <div class="file-status status-accepted">
-                                        ✓ Accepted{% if upload.accepted_at %} on {{ upload.accepted_at|date:"M d, Y H:i" }}{% endif %}
-                                    </div>
-                                    {% else %}
-                                    <div class="file-status status-pending">Pending Review</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="file-actions">
-                                <a href="{{ upload.file_url }}" target="_blank" class="btn btn-view">View</a>
-                            </div>
-                        </div>
-                        {% empty %}
-                        <div class="empty-state">No files uploaded yet</div>
-                        {% endfor %}
-                    </div>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
-            {% endif %}
-                </div>
-            </div> -->
-
+            {% if requested_documents %}
             <div class="section">
-                <div class="section-title" onclick="toggleSection(this)">
-                    <span>Individual Documents</span>
+                <div class="section-title">
+                    <span>Requested Documents</span>
                 </div>
-                <div class="section-content {% if not individual_documents %}collapsed{% endif %}">
-            {% if individual_documents %}
-                {% for doc in individual_documents %}
+                <div class="section-content">
+                {% for doc in requested_documents %}
                 <div class="document-card">
                     <div class="document-header" onclick="toggleDocument(this)">
                         <div>
@@ -488,52 +414,8 @@
                     </div>
                 </div>
                 {% endfor %}
-            {% else %}
-                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
-            {% endif %}
                 </div>
             </div>
-
-            <div class="section">
-                <div class="section-title" onclick="toggleSection(this)">
-                    <span>Needs List Documents</span>
-                </div>
-                <div class="section-content {% if not needs_list_documents %}collapsed{% endif %}">
-            {% if needs_list_documents %}
-                {% for print_group_name, documents in needs_list_documents.items %}
-                <div class="print-group-container">
-                    <div class="section-subtitle" onclick="togglePrintGroup(this)">
-                        <span>{{ print_group_name }}</span>
-                    </div>
-                    <div class="print-group-content">
-                    {% for doc in documents %}
-                    <div class="document-card">
-                        <div class="document-header" onclick="toggleDocument(this)">
-                            <div>
-                                <div class="document-name">{{ doc.document_name }}</div>
-                                <div class="document-description">{{ doc.document_description }}</div>
-                            </div>
-                        </div>
-                        <div class="document-content">
-                        <div class="uploaded-files">
-                        {% for upload in doc.uploads %}
-                        {% include "documents/includes/user_view_upload_row.html" with upload=upload %}
-                        {% empty %}
-                        <div class="empty-state">No files uploaded yet</div>
-                        {% endfor %}
-                    </div>
-                    </div>
-                </div>
-                {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">No documents in this section</div>
-            {% endif %}
-                </div>
-            </div>
-
             {% else %}
             <div class="empty-state">
                 No documents have been selected by the admin yet. Please wait for the admin to select documents.
@@ -542,18 +424,6 @@
         </div>
     </div>
     <script>
-        function toggleSection(element) {
-            const content = element.nextElementSibling;
-            element.classList.toggle('collapsed');
-            content.classList.toggle('collapsed');
-        }
-
-        function togglePrintGroup(element) {
-            const content = element.nextElementSibling;
-            element.classList.toggle('collapsed');
-            content.classList.toggle('collapsed');
-        }
-
         function toggleDocument(element) {
             const content = element.nextElementSibling;
             element.classList.toggle('collapsed');

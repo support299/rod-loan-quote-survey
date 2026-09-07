@@ -64,21 +64,30 @@ class PrintGroup(models.Model):
 class Document(models.Model):
     """
     Represents a document that may be required for loan processing.
-    Each document belongs to a category and can be associated with multiple print groups.
-    If request is set, the document is request-scoped (custom doc for that request only).
+    Each document belongs to a category (loan program) and can optionally
+    carry a blank template the borrower downloads before uploading.
     """
+    ATTACHMENT_MODE_FILE = "file"
+    ATTACHMENT_MODE_TEMPLATE = "template"
+    ATTACHMENT_MODE_CHOICES = [
+        (ATTACHMENT_MODE_FILE, "File (request only)"),
+        (ATTACHMENT_MODE_TEMPLATE, "Template (download + upload)"),
+    ]
+
     name = models.CharField(
         max_length=300,
         help_text="Document name (e.g., Bank Statements, Gift Letter)"
     )
     description = models.TextField(
-        help_text="Detailed description of what the document is and its purpose"
+        blank=True,
+        default="",
+        help_text="Optional description of what the document is and its purpose"
     )
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE,
         related_name='documents',
-        help_text="The category this document belongs to"
+        help_text="The loan program (category) this document belongs to"
     )
     request = models.ForeignKey(
         'DocumentRequest',
@@ -86,7 +95,7 @@ class Document(models.Model):
         null=True,
         blank=True,
         related_name='custom_documents',
-        help_text="If set, this document is visible only for this request (custom ad hoc/individual/needs list doc)"
+        help_text="If set, this document is visible only for this request (custom doc)"
     )
     owner_account = models.ForeignKey(
         "accounts.GHLAuthCredentials",
@@ -100,13 +109,27 @@ class Document(models.Model):
         PrintGroup,
         related_name='documents',
         blank=True,
-        help_text="Print groups this document belongs to"
+        help_text="Legacy print groups (needs list); unused in new loan-program flow"
+    )
+    attachment_mode = models.CharField(
+        max_length=20,
+        choices=ATTACHMENT_MODE_CHOICES,
+        default=ATTACHMENT_MODE_FILE,
+        help_text="file = request upload only; template = borrower can download blank then upload",
+    )
+    blank_template = models.ForeignKey(
+        "NeedsListTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents",
+        help_text="Blank template file in GHL Media (when attachment_mode=template)",
     )
     file = models.FileField(
         upload_to='documents/%Y/%m/%d/',
         blank=True,
         null=True,
-        help_text="Uploaded document file"
+        help_text="Legacy local file (prefer blank_template / GHL)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -120,6 +143,15 @@ class Document(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_template_mode(self):
+        return self.attachment_mode == self.ATTACHMENT_MODE_TEMPLATE
+
+    def template_download_url(self):
+        if self.blank_template_id and self.blank_template:
+            return self.blank_template.ghl_file_url
+        return None
 
 
 class AccountDocumentLibrary(models.Model):

@@ -174,7 +174,7 @@
             <div class="header">
                 <div>
                     <h1>Catalog Admin</h1>
-                    <p>Add categories, documents, and needs-list groups for this location. They show on Individual Documents and Needs List.</p>
+                    <p>Manage loan programs and documents for this location.</p>
                 </div>
                 <button type="button" class="btn" onclick="window.location.href=preserveQueryHref('/{{ request_id }}/request/admin/')">← Back</button>
             </div>
@@ -182,28 +182,26 @@
             <div id="alert" class="alert"></div>
 
             <div class="tabs">
-                <button type="button" class="tab active" data-tab="categories">Categories</button>
+                <button type="button" class="tab active" data-tab="categories">Loan Programs</button>
                 <button type="button" class="tab" data-tab="documents">Documents</button>
-                <button type="button" class="tab" data-tab="print-groups">Needs List Groups</button>
-                <button type="button" class="tab" data-tab="templates">Templates</button>
             </div>
 
             <div class="panel active" id="panel-categories">
                 <div class="panel-toolbar">
-                    <p class="hint">Categories group documents on the Individual Documents page.</p>
-                    <button type="button" class="btn-toggle-form" data-toggle="form-category" data-label="Add Category">Add Category</button>
+                    <p class="hint">Loan programs group documents on the Request Documents page.</p>
+                    <button type="button" class="btn-toggle-form" data-toggle="form-category" data-label="Add Loan Program">Add Loan Program</button>
                 </div>
                 <form class="grid-form collapsible-form" id="form-category">
                     <div class="full">
-                        <label for="cat-name">Category name *</label>
-                        <input id="cat-name" name="name" required placeholder="e.g. Income Docs">
+                        <label for="cat-name">Loan program name *</label>
+                        <input id="cat-name" name="name" required placeholder="e.g. Fix &amp; Flip">
                     </div>
                     <div class="full">
                         <label for="cat-desc">Description</label>
                         <input id="cat-desc" name="description" placeholder="Optional">
                     </div>
                     <div class="full">
-                        <button type="submit" class="btn btn-primary">Add Category</button>
+                        <button type="submit" class="btn btn-primary">Add Loan Program</button>
                     </div>
                 </form>
                 <div class="list" id="list-categories"></div>
@@ -211,20 +209,21 @@
 
             <div class="panel" id="panel-documents">
                 <div class="panel-toolbar">
-                    <p class="hint">Documents appear on Individual Documents. Optionally attach a Needs List group so they also show under Needs List.</p>
+                    <p class="hint">Create documents under a loan program. Choose Template (blank download) or File (upload only).</p>
                     <button type="button" class="btn-toggle-form" data-toggle="form-document" data-label="Add Document">Add Document</button>
                 </div>
                 <form class="grid-form collapsible-form" id="form-document">
                     <div>
-                        <label for="doc-category">Category *</label>
+                        <label for="doc-category">Loan program *</label>
                         <select id="doc-category" name="category_id" required>
                             <option value="">Select</option>
                         </select>
                     </div>
                     <div>
-                        <label for="doc-pg">Needs List group (optional)</label>
-                        <select id="doc-pg" name="print_group_id">
-                            <option value="">None</option>
+                        <label for="doc-mode">Type *</label>
+                        <select id="doc-mode" name="attachment_mode" required>
+                            <option value="file">File (request only)</option>
+                            <option value="template">Template (download + upload)</option>
                         </select>
                     </div>
                     <div class="full">
@@ -232,56 +231,18 @@
                         <input id="doc-name" name="name" required placeholder="e.g. Bank Statements">
                     </div>
                     <div class="full">
-                        <label for="doc-desc">Description *</label>
-                        <textarea id="doc-desc" name="description" required placeholder="What the borrower should upload"></textarea>
+                        <label for="doc-desc">Description (optional)</label>
+                        <textarea id="doc-desc" name="description" placeholder="What the borrower should upload"></textarea>
+                    </div>
+                    <div class="full" id="doc-template-wrap" style="display:none;">
+                        <label for="doc-template-file">Template file *</label>
+                        <input id="doc-template-file" name="template_file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg">
                     </div>
                     <div class="full">
                         <button type="submit" class="btn btn-primary">Add Document</button>
                     </div>
                 </form>
                 <div class="list" id="list-documents"></div>
-            </div>
-
-            <div class="panel" id="panel-print-groups">
-                <div class="panel-toolbar">
-                    <p class="hint">Needs List groups (print groups) are the parent lists on the Needs List page. Add documents and assign them to a group in the Documents tab.</p>
-                    <button type="button" class="btn-toggle-form" data-toggle="form-print-group" data-label="Add Needs List Group">Add Needs List Group</button>
-                </div>
-                <form class="grid-form collapsible-form" id="form-print-group">
-                    <div class="full">
-                        <label for="pg-name">Group name *</label>
-                        <input id="pg-name" name="name" required placeholder="e.g. Conventional Refinance">
-                    </div>
-                    <div class="full">
-                        <label for="pg-desc">Description</label>
-                        <input id="pg-desc" name="description" placeholder="Optional">
-                    </div>
-                    <div class="full">
-                        <button type="submit" class="btn btn-primary">Add Needs List Group</button>
-                    </div>
-                </form>
-                <div class="list" id="list-print-groups"></div>
-            </div>
-
-            <div class="panel" id="panel-templates">
-                <div class="panel-toolbar">
-                    <p class="hint">Blank/template files stored in GHL <strong>Needs List Templates</strong> folder. Admins must pick one per document when sending a Needs List or Individual Documents request. Borrowers can download them on the upload page.</p>
-                    <button type="button" class="btn-toggle-form" data-toggle="form-template" data-label="Upload Template">Upload Template</button>
-                </div>
-                <form class="grid-form collapsible-form" id="form-template">
-                    <div>
-                        <label for="tpl-name">Template name *</label>
-                        <input id="tpl-name" name="name" required placeholder="e.g. Bank Statement Blank">
-                    </div>
-                    <div>
-                        <label for="tpl-file">File *</label>
-                        <input id="tpl-file" name="file" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg">
-                    </div>
-                    <div class="full">
-                        <button type="submit" class="btn btn-primary">Upload Template</button>
-                    </div>
-                </form>
-                <div class="list" id="list-templates"></div>
             </div>
         </div>
     </div>
@@ -368,65 +329,21 @@
                 sel.appendChild(opt);
             });
             if (!(data.categories || []).length) {
-                list.innerHTML = '<div class="empty">No categories yet. Click Add Category to create one.</div>';
+                list.innerHTML = '<div class="empty">No loan programs yet. Click Add Loan Program to create one.</div>';
             }
             list.querySelectorAll('[data-del-cat]').forEach(function (btn) {
                 btn.addEventListener('click', async function () {
-                    var name = btn.getAttribute('data-name') || 'this category';
+                    var name = btn.getAttribute('data-name') || 'this loan program';
                     var n = parseInt(btn.getAttribute('data-doc-count'), 10) || 0;
                     var msg = n
                         ? 'Delete "' + name + '"? This will also delete ' + n + ' document(s) in it.'
-                        : 'Delete category "' + name + '"?';
+                        : 'Delete loan program "' + name + '"?';
                     if (!confirm(msg)) return;
                     try {
                         await api('/api/categories/' + btn.getAttribute('data-del-cat') + '/', {
                             method: 'DELETE'
                         });
-                        showAlert('Category deleted', true);
-                        await refreshAll();
-                    } catch (e) { showAlert(e.message, false); }
-                });
-            });
-        }
-
-        async function loadPrintGroups() {
-            if (!locationId) {
-                document.getElementById('list-print-groups').innerHTML = '<div class="empty">location_id missing in URL. Open this page with ?location_id=...</div>';
-                return;
-            }
-            var data = await api('/api/print-groups/');
-            var list = document.getElementById('list-print-groups');
-            var sel = document.getElementById('doc-pg');
-            list.innerHTML = '';
-            sel.innerHTML = '<option value="">None</option>';
-            (data.print_groups || []).forEach(function (pg) {
-                var item = document.createElement('div');
-                item.className = 'item';
-                item.innerHTML =
-                    '<div><h4>' + escapeHtml(pg.name) + '</h4><p>' + escapeHtml(pg.description || '') + '</p></div>' +
-                    '<button type="button" class="btn btn-danger" data-del-pg="' + pg.id + '">Delete</button>';
-                list.appendChild(item);
-                var opt = document.createElement('option');
-                opt.value = pg.id;
-                opt.textContent = pg.name;
-                sel.appendChild(opt);
-            });
-            if (!(data.print_groups || []).length) {
-                list.innerHTML = '<div class="empty">No needs-list groups yet. Click Add Needs List Group to create one.</div>';
-            }
-            list.querySelectorAll('[data-del-pg]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    if (!confirm('Delete this needs-list group?')) return;
-                    try {
-                        await api('/api/account/print-group-library/', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(jsonBody({
-                                action: 'delete_owned',
-                                print_group_id: parseInt(btn.getAttribute('data-del-pg'), 10)
-                            }))
-                        });
-                        showAlert('Group deleted', true);
+                        showAlert('Loan program deleted', true);
                         await refreshAll();
                     } catch (e) { showAlert(e.message, false); }
                 });
@@ -442,13 +359,14 @@
             var list = document.getElementById('list-documents');
             list.innerHTML = '';
             (data.documents || []).forEach(function (d) {
-                var pgs = (d.print_groups || []).map(function (p) { return p.name; }).join(', ');
+                var mode = d.attachment_mode === 'template' ? 'Template' : 'File';
                 var item = document.createElement('div');
                 item.className = 'item';
                 item.innerHTML =
                     '<div><h4>' + escapeHtml(d.name) + '</h4><p>' + escapeHtml(d.description || '') + '</p>' +
                     '<span class="tag">' + escapeHtml((d.category && d.category.name) || '') + '</span>' +
-                    (pgs ? ' <span class="tag">' + escapeHtml(pgs) + '</span>' : '') +
+                    ' <span class="tag">' + mode + '</span>' +
+                    (d.template_url ? ' <a class="tag" href="' + escapeHtml(d.template_url) + '" target="_blank" rel="noopener">Blank file</a>' : '') +
                     '</div>' +
                     '<button type="button" class="btn btn-danger" data-del-doc="' + d.id + '">Delete</button>';
                 list.appendChild(item);
@@ -475,95 +393,6 @@
             });
         }
 
-        async function loadTemplates() {
-            if (!locationId) {
-                document.getElementById('list-templates').innerHTML = '<div class="empty">location_id missing in URL.</div>';
-                return;
-            }
-            var data = await api('/api/account/needs-list-templates/');
-            var list = document.getElementById('list-templates');
-            list.innerHTML = '';
-            if (!data.templates_parent_id) {
-                list.innerHTML = '<div class="empty">Templates folder not configured (templates_parent_id). Set it on this location’s GHL credentials.</div>';
-                return;
-            }
-            (data.templates || []).forEach(function (t) {
-                var item = document.createElement('div');
-                item.className = 'item';
-                item.innerHTML =
-                    '<div>' +
-                    '<h4>' + escapeHtml(t.name) + '</h4>' +
-                    '<p>' + escapeHtml(t.file_name || '') + '</p>' +
-                    (t.ghl_file_url ? '<a class="tag" href="' + escapeHtml(t.ghl_file_url) + '" target="_blank" rel="noopener">View / Download</a>' : '') +
-                    '</div>' +
-                    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-                    '<button type="button" class="btn" data-edit-tpl="' + t.id + '" data-name="' + escapeHtml(t.name) + '">Edit</button>' +
-                    '<button type="button" class="btn btn-danger" data-del-tpl="' + t.id + '">Delete</button>' +
-                    '</div>';
-                list.appendChild(item);
-            });
-            if (!(data.templates || []).length) {
-                list.innerHTML = '<div class="empty">No templates yet. Click Upload Template to add one.</div>';
-            }
-            list.querySelectorAll('[data-del-tpl]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    if (!confirm('Delete this template?')) return;
-                    try {
-                        await api('/api/account/needs-list-templates/' + btn.getAttribute('data-del-tpl') + '/', {
-                            method: 'DELETE'
-                        });
-                        showAlert('Template deleted', true);
-                        await loadTemplates();
-                    } catch (e) { showAlert(e.message, false); }
-                });
-            });
-            list.querySelectorAll('[data-edit-tpl]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    var id = btn.getAttribute('data-edit-tpl');
-                    var current = btn.getAttribute('data-name') || '';
-                    var nextName = prompt('Template name', current);
-                    if (nextName === null) return;
-                    nextName = nextName.trim();
-                    if (!nextName) { showAlert('Name is required', false); return; }
-                    var replace = confirm('Replace the file too? OK = choose a new file, Cancel = rename only.');
-                    var fd = new FormData();
-                    fd.append('location_id', locationId);
-                    fd.append('name', nextName);
-                    if (replace) {
-                        var input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg';
-                        input.onchange = async function () {
-                            if (!input.files || !input.files[0]) return;
-                            fd.append('file', input.files[0]);
-                            try {
-                                var res = await fetch(
-                                    (typeof withLocationQuery === 'function' ? withLocationQuery('/api/account/needs-list-templates/' + id + '/') : '/api/account/needs-list-templates/' + id + '/'),
-                                    { method: 'PATCH', body: fd }
-                                );
-                                var data = {};
-                                try { data = await res.json(); } catch (e) {}
-                                if (!res.ok) throw new Error(data.error || 'Update failed');
-                                showAlert('Template updated', true);
-                                await loadTemplates();
-                            } catch (e) { showAlert(e.message, false); }
-                        };
-                        input.click();
-                        return;
-                    }
-                    try {
-                        await api('/api/account/needs-list-templates/' + id + '/', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(jsonBody({ name: nextName }))
-                        });
-                        showAlert('Template renamed', true);
-                        await loadTemplates();
-                    } catch (e) { showAlert(e.message, false); }
-                });
-            });
-        }
-
         function escapeHtml(s) {
             return String(s || '').replace(/[&<>"']/g, function (c) {
                 return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
@@ -572,10 +401,17 @@
 
         async function refreshAll() {
             await loadCategories();
-            await loadPrintGroups();
             await loadDocuments();
-            await loadTemplates();
         }
+
+        document.getElementById('doc-mode').addEventListener('change', function () {
+            var wrap = document.getElementById('doc-template-wrap');
+            var input = document.getElementById('doc-template-file');
+            var isTpl = this.value === 'template';
+            wrap.style.display = isTpl ? 'block' : 'none';
+            input.required = isTpl;
+            if (!isTpl) input.value = '';
+        });
 
         document.getElementById('form-category').addEventListener('submit', async function (e) {
             e.preventDefault();
@@ -589,79 +425,41 @@
                     }))
                 });
                 e.target.reset();
-                showAlert('Category added', true);
+                showAlert('Loan program added', true);
                 closeFormPanel('form-category');
                 await loadCategories();
-            } catch (err) { showAlert(err.message, false); }
-        });
-
-        document.getElementById('form-print-group').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            if (!locationId) { showAlert('location_id required in URL', false); return; }
-            try {
-                await api('/api/account/print-groups/create/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(jsonBody({
-                        name: document.getElementById('pg-name').value.trim(),
-                        description: document.getElementById('pg-desc').value.trim()
-                    }))
-                });
-                e.target.reset();
-                showAlert('Needs list group added', true);
-                closeFormPanel('form-print-group');
-                await loadPrintGroups();
             } catch (err) { showAlert(err.message, false); }
         });
 
         document.getElementById('form-document').addEventListener('submit', async function (e) {
             e.preventDefault();
             if (!locationId) { showAlert('location_id required in URL', false); return; }
-            var pgId = document.getElementById('doc-pg').value;
-            var payload = {
-                name: document.getElementById('doc-name').value.trim(),
-                description: document.getElementById('doc-desc').value.trim(),
-                category_id: parseInt(document.getElementById('doc-category').value, 10),
-                print_group_ids: pgId ? [parseInt(pgId, 10)] : []
-            };
-            try {
-                await api('/api/documents/create/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(jsonBody(payload))
-                });
-                e.target.reset();
-                showAlert('Document added — it will show on Individual Documents / Needs List', true);
-                closeFormPanel('form-document');
-                await loadDocuments();
-            } catch (err) { showAlert(err.message, false); }
-        });
-
-        document.getElementById('form-template').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            if (!locationId) { showAlert('location_id required in URL', false); return; }
-            var name = document.getElementById('tpl-name').value.trim();
-            var fileInput = document.getElementById('tpl-file');
-            if (!name || !fileInput.files || !fileInput.files[0]) {
-                showAlert('Name and file are required', false);
-                return;
-            }
+            var mode = document.getElementById('doc-mode').value;
             var fd = new FormData();
+            fd.append('name', document.getElementById('doc-name').value.trim());
+            fd.append('description', document.getElementById('doc-desc').value.trim());
+            fd.append('category_id', document.getElementById('doc-category').value);
+            fd.append('attachment_mode', mode);
             fd.append('location_id', locationId);
-            fd.append('name', name);
-            fd.append('file', fileInput.files[0]);
+            if (mode === 'template') {
+                var f = document.getElementById('doc-template-file').files[0];
+                if (!f) { showAlert('Template file is required', false); return; }
+                fd.append('template_file', f);
+            }
             try {
                 var res = await fetch(
-                    typeof withLocationQuery === 'function' ? withLocationQuery('/api/account/needs-list-templates/') : '/api/account/needs-list-templates/',
+                    typeof withLocationQuery === 'function' ? withLocationQuery('/api/documents/create/') : '/api/documents/create/',
                     { method: 'POST', body: fd }
                 );
                 var data = {};
                 try { data = await res.json(); } catch (err) {}
-                if (!res.ok) throw new Error(data.error || 'Upload failed');
+                if (!res.ok) throw new Error(data.error || 'Create failed');
                 e.target.reset();
-                showAlert('Template uploaded', true);
-                closeFormPanel('form-template');
-                await loadTemplates();
+                document.getElementById('doc-template-wrap').style.display = 'none';
+                document.getElementById('doc-template-file').required = false;
+                showAlert('Document added', true);
+                closeFormPanel('form-document');
+                await loadDocuments();
             } catch (err) { showAlert(err.message, false); }
         });
 

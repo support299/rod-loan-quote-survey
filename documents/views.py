@@ -193,7 +193,9 @@ def get_documents(request):
     - category_id: Filter by category ID (optional)
     - print_group_id: Filter by print group ID (optional)
     """
-    documents = Document.objects.select_related('category', 'request').prefetch_related('print_groups')
+    documents = Document.objects.select_related(
+        "category", "request", "blank_template"
+    ).prefetch_related("print_groups")
     
     request_id = request.GET.get('request_id')
     doc_request = _document_request_by_url_id(request_id) if request_id else None
@@ -202,7 +204,7 @@ def get_documents(request):
         documents, account=account, doc_request=doc_request
     )
     
-    # Filter by category if provided
+    # Filter by category (loan program) if provided
     category_id = request.GET.get('category_id')
     if category_id:
         documents = documents.filter(category_id=category_id)
@@ -212,29 +214,7 @@ def get_documents(request):
     if print_group_id:
         documents = documents.filter(print_groups__id=print_group_id).distinct()
     
-    data = [
-        {
-            'id': document.id,
-            'name': document.name,
-            'description': document.description,
-            'category': {
-                'id': document.category.id,
-                'name': document.category.name,
-            },
-            'print_groups': [
-                {
-                    'id': pg.id,
-                    'name': pg.name,
-                }
-                for pg in document.print_groups.all()
-            ],
-            'file': document.file.url if document.file else None,
-            'file_name': document.file.name.split('/')[-1] if document.file else None,
-            'created_at': document.created_at.isoformat() if document.created_at else None,
-            'updated_at': document.updated_at.isoformat() if document.updated_at else None,
-        }
-        for document in documents
-    ]
+    data = [_serialize_document(document) for document in documents]
     return JsonResponse({'documents': data}, safe=False)
 
 
@@ -1167,19 +1147,24 @@ def _build_request_document_data(doc_request):
     """Build adhoc_docs, individual_docs, needs_list_docs for a document request (shared for PDF and pages)."""
     selections = AdminDocumentSelection.objects.filter(
         request=doc_request
-    ).select_related('document', 'print_group', 'template').prefetch_related('user_uploads')
-
+    ).exclude(section_type='needs_list').select_related(
+        'document', 'document__blank_template', 'print_group', 'template'
+    ).prefetch_related('user_uploads')
+    
     adhoc_docs = []
     individual_docs = []
     needs_list_docs = {}
 
     for selection in selections:
-        template = selection.template
+        template = selection.template or (
+            selection.document.blank_template if selection.document.blank_template_id else None
+        )
         doc_data = {
             'selection_id': selection.id,
             'document_id': selection.document.id,
             'document_name': selection.document.name,
             'document_description': selection.document.description,
+            'attachment_mode': selection.document.attachment_mode,
             'template_id': template.id if template else None,
             'template_name': template.name if template else None,
             'template_url': template.ghl_file_url if template else None,
@@ -1191,13 +1176,9 @@ def _build_request_document_data(doc_request):
         }
         if selection.section_type == 'adhoc':
             adhoc_docs.append(doc_data)
-        elif selection.section_type == 'individual':
+        else:
+            # individual (and any other non-needs) show under individual list
             individual_docs.append(doc_data)
-        elif selection.section_type == 'needs_list':
-            print_group_name = selection.print_group.name if selection.print_group else 'Unknown'
-            if print_group_name not in needs_list_docs:
-                needs_list_docs[print_group_name] = []
-            needs_list_docs[print_group_name].append(doc_data)
 
     return adhoc_docs, individual_docs, needs_list_docs
 
@@ -1317,58 +1298,45 @@ def adhoc_page(request, request_id):
 
 def individual_documents_page(request, request_id):
     """
-    Individual Documents - Request individual document(s) page
+    Request Individual Documents — create custom docs for this opportunity.
     """
-    # Get or create the document request
-    doc_request, created = DocumentRequest.objects.get_or_create(request_id=request_id)
+    doc_request, _created = DocumentRequest.objects.get_or_create(request_id=request_id)
     _link_doc_request_to_location(request, doc_request)
-    account = resolve_account_for_request(request, doc_request=doc_request)
-    
-    # Load existing selections for individual section
+
     existing_selections = AdminDocumentSelection.objects.filter(
         request=doc_request,
-        section_type='individual'
-    ).select_related('document', 'document__category', 'template')
-    
-    selected_document_ids = [sel.document.id for sel in existing_selections]
-    selected_templates = {
-        str(sel.document.id): sel.template_id
+        section_type="individual",
+        document__request=doc_request,
+    ).select_related("document", "document__category", "template")
+
+    custom_rows = [
+        {
+            "name": sel.document.name,
+            "description": sel.document.description or "",
+            "category_name": sel.document.category.name if sel.document.category_id else "",
+            "attachment_mode": sel.document.attachment_mode,
+        }
         for sel in existing_selections
-        if sel.template_id
-    }
-    
-    # Get categories: global + custom for this request only
-    # Do not hide empty categories — needed for "Create Custom Document" forms.
-    categories = Category.objects.filter(
-        Q(request__isnull=True) | Q(request=doc_request)
-    ).order_by('name')
-    
-    import json as json_module
+    ]
     context = {
-        'request_id': request_id,
-        'selected_document_ids': json_module.dumps(selected_document_ids),
-        'selected_templates': json_module.dumps(selected_templates),
-        'categories': categories,
-        'existing_custom_documents': [
-            {
-                'id': sel.id,
-                'document_id': sel.document.id,
-                'name': sel.document.name,
-                'description': sel.document.description,
-                'category_id': sel.document.category.id,
-                'category_name': sel.document.category.name,
-                'template_id': sel.template_id,
-                'template_name': sel.template.name if sel.template_id else None,
-            }
-            for sel in existing_selections
-        ],
+        "request_id": request_id,
+        "existing_custom_docs_json": json.dumps(custom_rows),
     }
-    return render(request, 'documents/individual_documents.html', context)
+    return render(request, "documents/individual_documents.html", context)
 
 
 def needs_list_page(request, request_id):
+    """Needs List removed — redirect to Request Documents homepage."""
+    url = reverse("admin-homepage", kwargs={"request_id": request_id})
+    qs = request.META.get("QUERY_STRING")
+    if qs:
+        url = f"{url}?{qs}"
+    return redirect(url)
+
+
+def _legacy_needs_list_page_unused(request, request_id):
     """
-    Needs List - Request needs list page
+    Legacy Needs List page (kept temporarily for reference; not routed).
     """
     # Get or create the document request
     doc_request, created = DocumentRequest.objects.get_or_create(request_id=request_id)
@@ -1459,81 +1427,99 @@ def needs_list_page(request, request_id):
 @require_http_methods(["POST"])
 def create_document(request):
     """
-    API endpoint to create a new document
+    Create a catalog document for a loan program (category).
     POST /api/documents/create/
-    Body: JSON with name, description, category_id, print_group_ids (optional)
+    Accepts JSON or multipart:
+      name, category_id (required), description (optional),
+      attachment_mode: file|template (default file),
+      template_file (required when attachment_mode=template),
+      location_id
     """
     try:
-        data = json.loads(request.body)
-        name = data.get('name')
-        description = data.get('description')
-        category_id = data.get('category_id')
-        print_group_ids = data.get('print_group_ids', [])
-        
-        if not name or not description or not category_id:
-            return JsonResponse({'error': 'Missing required fields: name, description, category_id'}, status=400)
+        if request.content_type and "multipart/form-data" in request.content_type:
+            data = request.POST.dict()
+            uploaded = request.FILES.get("template_file") or request.FILES.get("file")
+        else:
+            data = json.loads(request.body)
+            uploaded = None
+
+        name = (data.get("name") or "").strip()
+        description = (data.get("description") or "").strip()
+        category_id = data.get("category_id")
+        attachment_mode = (data.get("attachment_mode") or Document.ATTACHMENT_MODE_FILE).strip().lower()
+        if attachment_mode not in (
+            Document.ATTACHMENT_MODE_FILE,
+            Document.ATTACHMENT_MODE_TEMPLATE,
+        ):
+            return JsonResponse(
+                {"error": "attachment_mode must be 'file' or 'template'"},
+                status=400,
+            )
+
+        if not name or not category_id:
+            return JsonResponse(
+                {"error": "Missing required fields: name, category_id"},
+                status=400,
+            )
 
         from accounts.models import GHLAuthCredentials
 
-        location_id = data.get('location_id') or extract_location_id(request, data)
+        location_id = data.get("location_id") or extract_location_id(request, data)
         owner_account = None
         if location_id:
             owner_account = GHLAuthCredentials.objects.filter(
                 location_id=str(location_id).strip()
             ).first()
-        
+
         try:
             category = Category.objects.get(id=category_id)
         except Category.DoesNotExist:
-            return JsonResponse({'error': 'Category not found'}, status=404)
-        
+            return JsonResponse({"error": "Loan program (category) not found"}, status=404)
+
+        blank_template = None
+        if attachment_mode == Document.ATTACHMENT_MODE_TEMPLATE:
+            if not uploaded:
+                return JsonResponse(
+                    {"error": "template_file is required when attachment_mode is template"},
+                    status=400,
+                )
+            if not owner_account:
+                return JsonResponse(
+                    {"error": "location_id is required to upload a template"},
+                    status=400,
+                )
+            try:
+                blank_template = _upload_blank_template(
+                    owner_account, name, uploaded
+                )
+            except ValueError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+            except Exception as e:
+                return JsonResponse({"error": f"Template upload failed: {e}"}, status=502)
+
         document = Document.objects.create(
             name=name,
             description=description,
             category=category,
             owner_account=owner_account,
+            attachment_mode=attachment_mode,
+            blank_template=blank_template,
         )
         if owner_account is None:
             sync_master_document_to_all_accounts(document)
 
-        acc_for_pg = owner_account or resolve_account_for_request(request, json_body=data)
-        
-        # Add print groups if provided
-        if print_group_ids:
-            print_groups = list(PrintGroup.objects.filter(id__in=print_group_ids))
-            if len(print_groups) != len(print_group_ids):
-                return JsonResponse({'error': 'One or more print groups not found'}, status=404)
-            if acc_for_pg:
-                for pg in print_groups:
-                    if not print_group_visible_to_account(pg, acc_for_pg, None):
-                        return JsonResponse(
-                            {
-                                'error': (
-                                    f'Print group "{pg.name}" is not enabled for this subaccount '
-                                    '(adjust the account print group library).'
-                                )
-                            },
-                            status=403,
-                        )
-            document.print_groups.set(print_groups)
-        
-        return JsonResponse({
-            'success': True,
-            'document': {
-                'id': document.id,
-                'name': document.name,
-                'description': document.description,
-                'category': {
-                    'id': document.category.id,
-                    'name': document.category.name,
-                }
-            }
-        }, status=201)
-    
+        return JsonResponse(
+            {
+                "success": True,
+                "document": _serialize_document(document),
+            },
+            status=201,
+        )
+
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @csrf_exempt
@@ -1664,61 +1650,96 @@ def create_adhoc_document(request, request_id):
 @require_http_methods(["POST"])
 def create_individual_document(request, request_id):
     """
-    API endpoint to create a custom Individual document.
+    Create a custom document for this request (Request Individual Documents).
     POST /api/{request_id}/admin/individual/create/
-    Body: JSON with name, description, category_id
+    JSON or multipart: name, category_id, description?, attachment_mode?, template_file?
     """
     try:
-        # Get or create the document request
-        doc_request, created = DocumentRequest.objects.get_or_create(request_id=request_id)
-        
-        data = json.loads(request.body)
+        doc_request, _created = DocumentRequest.objects.get_or_create(request_id=request_id)
+
+        if request.content_type and "multipart/form-data" in request.content_type:
+            data = request.POST.dict()
+            uploaded = request.FILES.get("template_file") or request.FILES.get("file")
+        else:
+            data = json.loads(request.body)
+            uploaded = None
+
         _link_doc_request_to_location(request, doc_request, json_body=data)
-        name = data.get('name')
-        description = data.get('description')
-        category_id = data.get('category_id')
-        
-        if not name or not description or not category_id:
-            return JsonResponse({'error': 'Missing required fields: name, description, category_id'}, status=400)
-        
+        name = (data.get("name") or "").strip()
+        description = (data.get("description") or "").strip()
+        category_id = data.get("category_id")
+        attachment_mode = (data.get("attachment_mode") or Document.ATTACHMENT_MODE_FILE).strip().lower()
+        if attachment_mode not in (
+            Document.ATTACHMENT_MODE_FILE,
+            Document.ATTACHMENT_MODE_TEMPLATE,
+        ):
+            return JsonResponse(
+                {"error": "attachment_mode must be 'file' or 'template'"},
+                status=400,
+            )
+
+        if not name or not category_id:
+            return JsonResponse(
+                {"error": "Missing required fields: name, category_id"},
+                status=400,
+            )
+
         try:
             category = Category.objects.get(id=category_id)
         except Category.DoesNotExist:
-            return JsonResponse({'error': 'Category not found'}, status=404)
-        
-        # Create the document (request-scoped so it appears only for this request)
+            return JsonResponse({"error": "Loan program (category) not found"}, status=404)
+
+        blank_template = None
+        if attachment_mode == Document.ATTACHMENT_MODE_TEMPLATE:
+            if not uploaded:
+                return JsonResponse(
+                    {"error": "template_file is required when attachment_mode is template"},
+                    status=400,
+                )
+            account = resolve_account_for_request(
+                request, json_body=data, doc_request=doc_request
+            )
+            if not account:
+                return JsonResponse(
+                    {"error": "location_id / GHL account required to upload a template"},
+                    status=400,
+                )
+            try:
+                blank_template = _upload_blank_template(account, name, uploaded)
+            except ValueError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+            except Exception as e:
+                return JsonResponse({"error": f"Template upload failed: {e}"}, status=502)
+
         document = Document.objects.create(
             name=name,
             description=description,
             category=category,
-            request=doc_request
+            request=doc_request,
+            attachment_mode=attachment_mode,
+            blank_template=blank_template,
         )
-        
-        # Create admin selection for this individual document
+
         selection = AdminDocumentSelection.objects.create(
             request=doc_request,
-            section_type='individual',
-            document=document
+            section_type="individual",
+            document=document,
+            template=blank_template,
         )
-        
-        return JsonResponse({
-            'success': True,
-            'selection_id': selection.id,
-            'document': {
-                'id': document.id,
-                'name': document.name,
-                'description': document.description,
-                'category': {
-                    'id': document.category.id,
-                    'name': document.category.name,
-                }
-            }
-        }, status=201)
-    
+
+        return JsonResponse(
+            {
+                "success": True,
+                "selection_id": selection.id,
+                "document": _serialize_document(document),
+            },
+            status=201,
+        )
+
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @csrf_exempt
@@ -1913,6 +1934,17 @@ def save_admin_selections(request, request_id):
         
         if not section_type or section_type not in ['adhoc', 'individual', 'needs_list']:
             return JsonResponse({'error': 'Invalid section_type. Must be: adhoc, individual, or needs_list'}, status=400)
+
+        if section_type == 'needs_list':
+            return JsonResponse(
+                {
+                    'error': (
+                        'Needs List has been removed. Use Loan Program document '
+                        'selection on the Request Documents page.'
+                    )
+                },
+                status=410,
+            )
         
         if not document_ids:
             return JsonResponse({'error': 'document_ids is required'}, status=400)
@@ -1922,70 +1954,35 @@ def save_admin_selections(request, request_id):
 
         account = resolve_account_for_request(request, json_body=data, doc_request=doc_request)
 
-        # Needs list + individual: every selected document must have a template
+        # Optional explicit templates map (legacy); otherwise use document.blank_template
+        # when attachment_mode=template.
         template_by_doc_id = {}
-        requires_templates = section_type in ('needs_list', 'individual')
-        if requires_templates:
-            missing_templates = []
-            for raw_doc_id in document_ids:
-                key = str(raw_doc_id)
-                tid = templates_map.get(key)
-                if tid is None:
-                    tid = templates_map.get(raw_doc_id)
-                if tid is None or tid == "" or tid == 0:
-                    missing_templates.append(raw_doc_id)
-                    continue
-                try:
-                    tid_int = int(tid)
-                except (TypeError, ValueError):
-                    missing_templates.append(raw_doc_id)
-                    continue
-                template_by_doc_id[int(raw_doc_id)] = tid_int
+        for raw_doc_id in document_ids:
+            key = str(raw_doc_id)
+            tid = templates_map.get(key)
+            if tid is None:
+                tid = templates_map.get(raw_doc_id)
+            if tid is None or tid == "" or tid == 0:
+                continue
+            try:
+                template_by_doc_id[int(raw_doc_id)] = int(tid)
+            except (TypeError, ValueError):
+                return JsonResponse({'error': f'Invalid template id for document {raw_doc_id}'}, status=400)
 
-            if missing_templates:
-                section_label = 'Needs List' if section_type == 'needs_list' else 'Individual Documents'
+        if template_by_doc_id:
+            template_ids = set(template_by_doc_id.values())
+            qs = NeedsListTemplate.objects.filter(id__in=template_ids)
+            if account:
+                qs = qs.filter(account=account)
+            found = {t.id: t for t in qs}
+            if len(found) != len(template_ids):
                 return JsonResponse(
-                    {
-                        'error': (
-                            f'Please choose a template file for every selected document '
-                            f'before sending the {section_label} request.'
-                        ),
-                        'missing_template_document_ids': missing_templates,
-                    },
+                    {'error': 'One or more selected templates were not found for this location.'},
                     status=400,
                 )
-
-            if account:
-                template_ids = set(template_by_doc_id.values())
-                found = {
-                    t.id: t
-                    for t in NeedsListTemplate.objects.filter(
-                        account=account, id__in=template_ids
-                    )
-                }
-                if len(found) != len(template_ids):
-                    return JsonResponse(
-                        {'error': 'One or more selected templates were not found for this location.'},
-                        status=400,
-                    )
-                template_by_doc_id = {
-                    doc_id: found[tid] for doc_id, tid in template_by_doc_id.items()
-                }
-            else:
-                # No account resolved — still load templates by id
-                template_ids = set(template_by_doc_id.values())
-                found = {
-                    t.id: t
-                    for t in NeedsListTemplate.objects.filter(id__in=template_ids)
-                }
-                if len(found) != len(template_ids):
-                    return JsonResponse(
-                        {'error': 'One or more selected templates were not found.'},
-                        status=400,
-                    )
-                template_by_doc_id = {
-                    doc_id: found[tid] for doc_id, tid in template_by_doc_id.items()
-                }
+            template_by_doc_id = {
+                doc_id: found[tid] for doc_id, tid in template_by_doc_id.items()
+            }
 
         print_group = None
         if print_group_id:
@@ -2001,7 +1998,7 @@ def save_admin_selections(request, request_id):
                     )
         
         # Validate documents exist
-        documents = Document.objects.filter(id__in=document_ids)
+        documents = Document.objects.filter(id__in=document_ids).select_related("blank_template")
         if documents.count() != len(document_ids):
             return JsonResponse({'error': 'One or more documents not found'}, status=404)
 
@@ -2017,36 +2014,52 @@ def save_admin_selections(request, request_id):
                         },
                         status=403,
                     )
+
+        # Resolve template per document before writing selections
+        document_by_id = {doc.id: doc for doc in documents}
+        resolved_templates = {}
+        for doc_id in document_ids:
+            document = document_by_id[doc_id]
+            template_obj = template_by_doc_id.get(int(doc_id))
+            if template_obj is None and document.is_template_mode:
+                template_obj = document.blank_template
+            if document.is_template_mode and not template_obj:
+                return JsonResponse(
+                    {
+                        'error': (
+                            f'Document "{document.name}" is template mode but has '
+                            'no blank template file attached.'
+                        )
+                    },
+                    status=400,
+                )
+            resolved_templates[doc_id] = template_obj
         
         # Preserve existing selection rows when possible so previously uploaded files
         # stay linked. Only delete rows that are no longer selected.
         selections = []
-        document_by_id = {doc.id: doc for doc in documents}
         target_ids = set(document_ids)
         with transaction.atomic():
             existing_qs = AdminDocumentSelection.objects.filter(
                 request=doc_request,
                 section_type=section_type,
             )
-            # Needs-list selections are scoped per print_group — only update this group.
-            # Other need lists already sent for this opportunity stay intact.
             if section_type == "needs_list":
                 existing_qs = existing_qs.filter(print_group=print_group)
+                # Needs list was scoped replace; kept for legacy safety
+                existing_qs.exclude(document_id__in=target_ids).delete()
 
             existing_by_doc_id = {sel.document_id: sel for sel in existing_qs}
 
-            # Remove deselected documents for this scope.
-            existing_qs.exclude(document_id__in=target_ids).delete()
+            # Loan-program / individual sends upsert only — do not remove other
+            # requested docs (e.g. custom individual docs) on the same opportunity.
 
-            # Reuse existing row if present; otherwise create.
             for doc_id in document_ids:
                 document = document_by_id.get(doc_id)
                 if not document:
                     continue
                 selection = existing_by_doc_id.get(doc_id)
-                template_obj = (
-                    template_by_doc_id.get(int(doc_id)) if requires_templates else None
-                )
+                template_obj = resolved_templates.get(doc_id)
                 if not selection:
                     selection = AdminDocumentSelection.objects.create(
                         request=doc_request,
@@ -2055,8 +2068,9 @@ def save_admin_selections(request, request_id):
                         print_group=print_group,
                         template=template_obj,
                     )
-                elif requires_templates:
-                    if selection.template_id != (template_obj.id if template_obj else None):
+                else:
+                    new_tid = template_obj.id if template_obj else None
+                    if selection.template_id != new_tid:
                         selection.template = template_obj
                         selection.save(update_fields=["template"])
                 selections.append({
@@ -2767,6 +2781,62 @@ def _serialize_needs_list_template(tpl):
         "created_at": tpl.created_at.isoformat() if tpl.created_at else None,
         "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None,
     }
+
+
+def _serialize_document(document):
+    tpl = document.blank_template if document.blank_template_id else None
+    return {
+        "id": document.id,
+        "name": document.name,
+        "description": document.description or "",
+        "attachment_mode": document.attachment_mode,
+        "category": {
+            "id": document.category.id,
+            "name": document.category.name,
+        },
+        "print_groups": [
+            {"id": pg.id, "name": pg.name}
+            for pg in document.print_groups.all()
+        ],
+        "file": document.file.url if document.file else None,
+        "file_name": document.file.name.split("/")[-1] if document.file else None,
+        "blank_template": _serialize_needs_list_template(tpl) if tpl else None,
+        "template_url": tpl.ghl_file_url if tpl else None,
+        "created_at": document.created_at.isoformat() if document.created_at else None,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+    }
+
+
+def _upload_blank_template(account, display_name, uploaded_file):
+    """
+    Upload a blank template into the account's GHL templates folder and
+    create a NeedsListTemplate row. Raises ValueError on config/upload issues.
+    """
+    from .ghl_service import upload_file as ghl_upload_file
+
+    templates_folder = (account.templates_parent_id or "").strip()
+    if not templates_folder:
+        raise ValueError(
+            "Templates folder is not configured for this location "
+            "(set templates_parent_id on GHL credentials)."
+        )
+    result = ghl_upload_file(
+        uploaded_file,
+        name=uploaded_file.name or display_name,
+        parent_id=templates_folder,
+        access_token=account.access_token,
+    )
+    file_id = result.get("fileId")
+    file_url = result.get("url")
+    if not file_id or not file_url:
+        raise ValueError("GHL upload did not return fileId/url")
+    return NeedsListTemplate.objects.create(
+        account=account,
+        name=display_name,
+        ghl_file_id=file_id,
+        ghl_file_url=file_url,
+        file_name=uploaded_file.name or display_name,
+    )
 
 
 @csrf_exempt

@@ -615,11 +615,11 @@
                     <div class="upload-area" onclick="event.stopPropagation(); document.getElementById('file-{{ doc.selection_id }}').click()">
                         <div class="upload-icon">📄</div>
                         <div class="upload-text">Click to upload or drag and drop</div>
-                        <div class="upload-hint">PDF, DOC, DOCX, JPG, PNG (Max 10MB)</div>
+                        <div class="upload-hint">Multiple files OK · PDF, DOC, DOCX, JPG, PNG (Max 10MB each)</div>
                     </div>
                     <input type="file" id="file-{{ doc.selection_id }}" class="file-input" 
-                           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" 
-                           onchange="uploadFile('{{ doc.selection_id }}', this.files[0])">
+                           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" multiple
+                           onchange="uploadFiles('{{ doc.selection_id }}', this.files)">
                     <div class="uploaded-files" id="uploads-{{ doc.selection_id }}">
                         {% for upload in doc.uploads %}
                         {% include "documents/includes/user_upload_row.html" with upload=upload selection_id=doc.selection_id %}
@@ -667,11 +667,11 @@
                         <div class="upload-area" onclick="event.stopPropagation(); document.getElementById('file-{{ doc.selection_id }}').click()">
                         <div class="upload-icon">📄</div>
                         <div class="upload-text">Click to upload or drag and drop</div>
-                        <div class="upload-hint">PDF, DOC, DOCX, JPG, PNG (Max 10MB)</div>
+                        <div class="upload-hint">Multiple files OK · PDF, DOC, DOCX, JPG, PNG (Max 10MB each)</div>
                     </div>
                     <input type="file" id="file-{{ doc.selection_id }}" class="file-input" 
-                           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" 
-                           onchange="uploadFile('{{ doc.selection_id }}', this.files[0])">
+                           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" multiple
+                           onchange="uploadFiles('{{ doc.selection_id }}', this.files)">
                     <div class="uploaded-files" id="uploads-{{ doc.selection_id }}">
                         {% for upload in doc.uploads %}
                         {% include "documents/includes/user_upload_row.html" with upload=upload selection_id=doc.selection_id %}
@@ -779,6 +779,16 @@
                 closeConfirmModal(false);
             }
         });
+
+        async function uploadFiles(selectionId, fileList) {
+            const files = Array.from(fileList || []);
+            if (!files.length) return;
+            for (const file of files) {
+                await uploadFile(selectionId, file);
+            }
+            const input = document.getElementById(`file-${selectionId}`);
+            if (input) input.value = '';
+        }
 
         async function uploadFile(selectionId, file) {
             if (!file) return;
@@ -913,7 +923,7 @@
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     const selectionId = area.closest('.document-card').dataset.selectionId;
-                    uploadFile(parseInt(selectionId), files[0]);
+                    uploadFiles(parseInt(selectionId, 10), files);
                 }
             });
         });

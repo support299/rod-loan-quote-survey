@@ -17,10 +17,14 @@ from documents.ghl_service import (
 )
 from documents.models import OpportunityCardSubmission
 from documents.survey_ghl_fields import (
+    GHL_OPPORTUNITY_AE_EMAIL_FIELD_NAME,
+    GHL_OPPORTUNITY_AE_FIELD_NAME,
+    GHL_OPPORTUNITY_AE_NAME_FIELD_NAME,
     GHL_OPPORTUNITY_LOAN_ID_FIELD_KEY,
     GHL_OPPORTUNITY_LOAN_ID_FIELD_NAME,
     GHL_TEXT,
     LOAN_QUOTE_SURVEY_GHL_FIELDS,
+    account_executive_email,
     field_spec,
     normalize_survey_value,
 )
@@ -183,6 +187,121 @@ def ensure_opportunity_loan_id(opportunity_id, opportunity, account, access_toke
     }
 
 
+def resolve_opportunity_custom_field_by_name(account, field_name, access_token=None):
+    """
+    Resolve an existing opportunity custom field id by display name.
+    Caches on GHLCustomField. Does not create missing fields (AE Details
+    already exist in the GHL opportunity layout).
+    """
+    if not account or not field_name:
+        return None
+
+    token = access_token or account.access_token
+    location_id = account.location_id
+    target = _normalize_field_name(field_name)
+
+    cached = GHLCustomField.objects.filter(
+        account=account,
+        field_name=field_name,
+        is_active=True,
+        description__icontains="opportunity",
+    ).first()
+
+    try:
+        fields = list_location_custom_fields(
+            location_id, model="opportunity", access_token=token
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to list opportunity custom fields for location %s: %s",
+            location_id,
+            e,
+            exc_info=True,
+        )
+        return cached.ghl_field_id if cached else None
+
+    found = None
+    for field in fields:
+        name = (field.get("name") or "").strip()
+        if _normalize_field_name(name) == target and field.get("id"):
+            found = field
+            break
+
+    if found:
+        field_id = found["id"]
+        GHLCustomField.objects.update_or_create(
+            account=account,
+            ghl_field_id=field_id,
+            defaults={
+                "field_name": field_name,
+                "field_type": "text",
+                "description": f"Opportunity:{field_name}",
+                "is_active": True,
+            },
+        )
+        return field_id
+
+    if cached:
+        return cached.ghl_field_id
+
+    logger.warning(
+        "Opportunity custom field '%s' not found for location %s",
+        field_name,
+        location_id,
+    )
+    return None
+
+
+def sync_opportunity_account_executive_details(
+    opportunity_id, form_data, account, access_token=None
+):
+    """
+    Write Account Executive / Name / Email on the opportunity from the survey
+    AE dropdown. Skips phone (no numbers available).
+    """
+    token = access_token or account.access_token
+    ae_name = normalize_survey_value(
+        "account_executive", (form_data or {}).get("account_executive")
+    )
+    if not ae_name:
+        return {"skipped": True, "reason": "no_ae"}
+
+    ae_email = account_executive_email(ae_name)
+    values_by_field = [
+        (GHL_OPPORTUNITY_AE_FIELD_NAME, ae_name),
+        (GHL_OPPORTUNITY_AE_NAME_FIELD_NAME, ae_name),
+    ]
+    if ae_email:
+        values_by_field.append((GHL_OPPORTUNITY_AE_EMAIL_FIELD_NAME, ae_email))
+
+    custom_fields = []
+    missing = []
+    for field_name, value in values_by_field:
+        field_id = resolve_opportunity_custom_field_by_name(
+            account, field_name, access_token=token
+        )
+        if not field_id:
+            missing.append(field_name)
+            continue
+        custom_fields.append({"id": field_id, "field_value": value})
+
+    if custom_fields:
+        update_opportunity_custom_fields(
+            opportunity_id, custom_fields, access_token=token
+        )
+
+    summary = {
+        "ae_name": ae_name,
+        "ae_email": ae_email,
+        "fields_written": len(custom_fields),
+        "missing_fields": missing,
+    }
+    logger.info(
+        "Synced opportunity AE details for %s: %s", opportunity_id, summary
+    )
+    return summary
+
+
 def ensure_loan_quote_survey_contact_fields(account, access_token=None):
     """
     For each catalog field: reuse existing contact custom field by name, else create.
@@ -334,6 +453,10 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
                 access_token=token,
             )
 
+    ae_result = sync_opportunity_account_executive_details(
+        request_id, submission.form_data, account, access_token=token
+    )
+
     summary = {
         "request_id": request_id,
         "contact_id": contact_id,
@@ -343,6 +466,7 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
         "loan_id": loan_id_result.get("loan_id"),
         "loan_id_created": loan_id_result.get("created"),
         "loan_id_skipped": loan_id_result.get("skipped"),
+        "ae_details": ae_result,
     }
     logger.info("Loan Quote Survey GHL sync complete: %s", summary)
     return summary

@@ -13,6 +13,29 @@ GHL_DATE = "DATE"
 GHL_OPPORTUNITY_LOAN_ID_FIELD_NAME = "Loan ID"
 GHL_OPPORTUNITY_LOAN_ID_FIELD_KEY = "opportunity.loan_id"
 
+# Opportunity "Account Executive Details" fields (filled when survey AE dropdown is chosen).
+GHL_OPPORTUNITY_AE_FIELD_NAME = "Account Executive"
+GHL_OPPORTUNITY_AE_NAME_FIELD_NAME = "Account Executive Name"
+GHL_OPPORTUNITY_AE_EMAIL_FIELD_NAME = "Account Executive Email"
+# Phone intentionally omitted — we do not have AE phone numbers.
+
+# Emails for known AEs (case-insensitive name match). Others get name only.
+ACCOUNT_EXECUTIVE_EMAILS = {
+    "allison": "allison@flipfunding.com",
+    "josef": "Josef@flipfunding.com",
+    "thomas": "Thomas@flipfunding.com",
+    "larry": "Larry@flipfunding.com",
+    "ashley": "Ashley@flipfunding.com",
+}
+
+
+def account_executive_email(ae_name):
+    """Return AE email for a dropdown name, or None if unknown / N/A."""
+    key = (ae_name or "").strip().lower()
+    if not key or key == "n/a":
+        return None
+    return ACCOUNT_EXECUTIVE_EMAILS.get(key)
+
 # key -> GHL contact custom field display name (create-if-missing by name).
 LOAN_QUOTE_SURVEY_GHL_FIELDS = {
     "entity_name": "Entity Name",

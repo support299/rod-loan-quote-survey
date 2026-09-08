@@ -919,7 +919,10 @@ def _opportunity_card_form_context(
     location_id='',
     error='',
     is_public=False,
+    contact_locked=False,
+    linked_contact=None,
 ):
+    linked_contact = linked_contact or {}
     return {
         'request_id': request_id or '',
         'initial': initial or {},
@@ -928,6 +931,8 @@ def _opportunity_card_form_context(
         'location_id': location_id or '',
         'error': error or '',
         'is_public': is_public,
+        'contact_locked': contact_locked,
+        'linked_contact': linked_contact,
         'ae_options': OPPORTUNITY_CARD_AE_OPTIONS,
         'total_steps': 4,
     }
@@ -969,16 +974,19 @@ def _submit_loan_quote_survey(request, opportunity_id=None):
     Shared submit path for public (/loan-quote-survey/) and bound (/{id}/opportunity-card/) forms.
 
     - opportunity_id None → upsert contact + CREATE opportunity
-    - opportunity_id set  → upsert contact + UPDATE that opportunity
+    - opportunity_id set  → keep linked contact + UPDATE that opportunity
 
     :return: (submission, created, opportunity_id, location_id, error_message)
     """
     from .survey_opportunity import ensure_contact_and_opportunity, get_default_ghl_account
 
     form_data = _parse_opportunity_card_post(request)
-    contact_err = _validate_contact_fields(form_data)
-    if contact_err:
-        return None, False, opportunity_id, '', contact_err
+    lock_contact = bool(opportunity_id)
+
+    if not lock_contact:
+        contact_err = _validate_contact_fields(form_data)
+        if contact_err:
+            return None, False, opportunity_id, '', contact_err
 
     account = get_default_ghl_account()
     if not account:
@@ -989,6 +997,7 @@ def _submit_loan_quote_survey(request, opportunity_id=None):
             form_data,
             opportunity_id=opportunity_id,
             account=account,
+            lock_existing_contact=lock_contact,
         )
     except Exception as e:
         logger.exception(
@@ -1062,13 +1071,45 @@ def loan_quote_survey_form(request):
     )
 
 
+def _bound_opportunity_card_context(request, request_id, **overrides):
+    """Context for GHL-embedded /{id}/opportunity-card/ with locked linked contact."""
+    from .survey_opportunity import fetch_opportunity_linked_contact, get_default_ghl_account
+
+    account = get_default_ghl_account()
+    linked = fetch_opportunity_linked_contact(request_id, account=account) or {}
+    initial = overrides.pop('initial', None) or {}
+    # Always prefer live GHL contact on the bound form
+    for key in ('full_name', 'email', 'phone'):
+        if linked.get(key):
+            initial[key] = linked[key]
+    ctx = _opportunity_card_form_context(
+        request_id=request_id,
+        initial=initial,
+        location_id=overrides.pop(
+            'location_id',
+            extract_location_id(request) or (account.location_id if account else '') or '',
+        ),
+        contact_locked=True,
+        linked_contact=linked,
+        is_public=False,
+        **overrides,
+    )
+    if not linked.get('contact_id') and not overrides.get('error'):
+        ctx['error'] = (
+            ctx.get('error')
+            or 'No contact is linked to this opportunity in GHL yet. '
+               'Associate a contact on the opportunity, then refresh this form.'
+        )
+    return ctx
+
+
 @csrf_exempt
 def opportunity_card_form(request, request_id):
     """
     Opportunity Card – Loan Quote Survey Form with conditional fields.
     URL: {request_id}/opportunity-card/
-    GET: show form (optionally pre-filled from existing submission).
-    POST: upsert contact + update THIS opportunity, save submission.
+    GHL-embedded: shows the opportunity's linked contact as read-only (does not
+    create/reassign contacts). Public website entry uses /loan-quote-survey/.
     CSRF-exempt so the form works when embedded in an iframe on other origins (e.g. GoHighLevel).
     """
     if request.method == 'POST':
@@ -1079,8 +1120,9 @@ def opportunity_card_form(request, request_id):
             return render(
                 request,
                 'documents/opportunity_card_form.html',
-                _opportunity_card_form_context(
-                    request_id=request_id,
+                _bound_opportunity_card_context(
+                    request,
+                    request_id,
                     initial=_parse_opportunity_card_post(request),
                     location_id=location_id or extract_location_id(request) or '',
                     error=error or 'Submission failed. Please try again.',
@@ -1089,8 +1131,9 @@ def opportunity_card_form(request, request_id):
         return render(
             request,
             'documents/opportunity_card_form.html',
-            _opportunity_card_form_context(
-                request_id=opp_id or request_id,
+            _bound_opportunity_card_context(
+                request,
+                opp_id or request_id,
                 initial=submission.form_data or {},
                 success=True,
                 message=(
@@ -1116,12 +1159,12 @@ def opportunity_card_form(request, request_id):
     return render(
         request,
         'documents/opportunity_card_form.html',
-        _opportunity_card_form_context(
-            request_id=request_id,
+        _bound_opportunity_card_context(
+            request,
+            request_id,
             initial=initial,
             success=success,
             message=message,
-            location_id=extract_location_id(request) or '',
         ),
     )
 

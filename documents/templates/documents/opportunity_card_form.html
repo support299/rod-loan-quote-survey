@@ -263,6 +263,43 @@
         .field-group.has-error .field-error-msg { display: block; }
         .field-group.has-error .field-hint { display: none; }
 
+        .contact-locked {
+            border: 1px solid #d7e4f2;
+            background: linear-gradient(180deg, #f7fbff, #eef5fb);
+            border-radius: 14px;
+            padding: 18px 16px;
+        }
+        .contact-locked-note {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            line-height: 1.45;
+        }
+        .contact-locked-grid {
+            display: grid;
+            gap: 12px;
+        }
+        .contact-locked-item label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #1565c0;
+            margin-bottom: 4px;
+        }
+        .contact-locked-item .value {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            word-break: break-word;
+        }
+        .contact-locked-item .value.empty {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-style: italic;
+        }
+
         @media (max-width: 640px) {
             body { padding: 16px 12px 32px; }
             .form-header, .form-body { padding-left: 20px; padding-right: 20px; }
@@ -304,6 +341,36 @@
                 <div class="form-step active" data-step="1">
                     <section class="section">
                         <h2 class="section-title">Contact Info</h2>
+                        {% if contact_locked %}
+                        <div class="contact-locked">
+                            <p class="contact-locked-note">
+                                This opportunity already has a contact in GHL. Details below are shown for reference and cannot be changed from this form.
+                            </p>
+                            <div class="contact-locked-grid">
+                                <div class="contact-locked-item">
+                                    <label>Full Name</label>
+                                    <div class="value {% if not linked_contact.full_name %}empty{% endif %}">
+                                        {{ linked_contact.full_name|default:"Not set on contact" }}
+                                    </div>
+                                </div>
+                                <div class="contact-locked-item">
+                                    <label>Email</label>
+                                    <div class="value {% if not linked_contact.email %}empty{% endif %}">
+                                        {{ linked_contact.email|default:"Not set on contact" }}
+                                    </div>
+                                </div>
+                                <div class="contact-locked-item">
+                                    <label>Phone</label>
+                                    <div class="value {% if not linked_contact.phone %}empty{% endif %}">
+                                        {{ linked_contact.phone|default:"Not set on contact" }}
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="full_name" name="full_name" value="{{ linked_contact.full_name|default:'' }}">
+                            <input type="hidden" id="email" name="email" value="{{ linked_contact.email|default:'' }}">
+                            <input type="hidden" id="phone" name="phone" value="{{ linked_contact.phone|default:'' }}">
+                        </div>
+                        {% else %}
                         <div class="section-fields">
                             <div class="field-group field-full">
                                 <label for="full_name">Full Name <span class="required">*</span></label>
@@ -322,6 +389,7 @@
                                 <span class="field-error-msg" data-error-for="phone">Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)</span>
                             </div>
                         </div>
+                        {% endif %}
                     </section>
                 </div>
 
@@ -629,6 +697,7 @@
             var form = document.getElementById('opportunity-form');
             var currentStep = 1;
             var totalSteps = {{ total_steps|default:4 }};
+            var contactLocked = {{ contact_locked|yesno:"true,false" }};
 
             function getTriggerValue(fieldName) {
                 var el = form.querySelector('[name="' + fieldName + '"]');
@@ -752,6 +821,7 @@
             }
 
             function validateStep(step) {
+                if (contactLocked && step === 1) return true;
                 var panel = form.querySelector('.form-step[data-step="' + step + '"]');
                 var ok = true;
                 var firstBad = null;

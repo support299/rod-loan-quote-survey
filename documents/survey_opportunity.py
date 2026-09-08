@@ -9,6 +9,8 @@ from django.core.cache import cache
 from accounts.models import GHLAuthCredentials
 from documents.ghl_service import (
     create_opportunity,
+    get_contact,
+    get_opportunity,
     list_pipelines,
     update_opportunity,
     upsert_contact_by_email_or_phone,
@@ -101,12 +103,66 @@ def build_opportunity_name(form_data):
     return entity or address or "Quick App Submission Form"
 
 
-def ensure_contact_and_opportunity(form_data, opportunity_id=None, account=None):
+def contact_form_fields_from_ghl(contact):
+    """Map a GHL contact dict to survey full_name / email / phone."""
+    contact = contact or {}
+    name = (contact.get("name") or "").strip()
+    if not name:
+        first = (contact.get("firstName") or "").strip()
+        last = (contact.get("lastName") or "").strip()
+        name = f"{first} {last}".strip()
+    return {
+        "full_name": name,
+        "email": (contact.get("email") or "").strip(),
+        "phone": (contact.get("phone") or "").strip(),
+        "contact_id": contact.get("id") or "",
+    }
+
+
+def fetch_opportunity_linked_contact(opportunity_id, account=None):
+    """
+    Load the contact already tied to a GHL opportunity.
+    :return: dict {full_name, email, phone, contact_id} or None
+    """
+    account = account or get_default_ghl_account()
+    if not account or not opportunity_id:
+        return None
+    token = account.access_token
+    try:
+        opp_data = get_opportunity(opportunity_id, access_token=token)
+        opportunity = opp_data.get("opportunity") or {}
+        contact_id = opportunity.get("contactId")
+        if not contact_id:
+            return None
+        contact = get_contact(contact_id, access_token=token)
+        if isinstance(contact, dict) and contact.get("contact"):
+            contact = contact["contact"]
+        fields = contact_form_fields_from_ghl(contact)
+        fields["contact_id"] = contact_id
+        return fields
+    except Exception as e:
+        logger.warning(
+            "Failed to load linked contact for opportunity %s: %s",
+            opportunity_id,
+            e,
+            exc_info=True,
+        )
+        return None
+
+
+def ensure_contact_and_opportunity(
+    form_data,
+    opportunity_id=None,
+    account=None,
+    lock_existing_contact=False,
+):
     """
     Upsert GHL contact (email then phone), then create or update opportunity.
 
     - opportunity_id is None  → always CREATE a new opportunity
     - opportunity_id set      → UPDATE that opportunity
+    - lock_existing_contact   → keep opportunity's current contact (no upsert /
+      reassignment). Used for the GHL-embedded /{id}/opportunity-card/ form.
 
     :return: dict with contact_id, opportunity_id, location_id, created_opportunity, ...
     """
@@ -118,80 +174,111 @@ def ensure_contact_and_opportunity(form_data, opportunity_id=None, account=None)
     location_id = account.location_id
     form_data = form_data or {}
 
-    full_name = (form_data.get("full_name") or "").strip()
-    email = (form_data.get("email") or "").strip()
-    phone = (form_data.get("phone") or "").strip()
-    if not full_name or not email or not phone:
-        raise ValueError("Full Name, Email, and Phone are required.")
-
-    from documents.contact_validation import (
-        is_valid_email,
-        is_valid_full_name,
-        normalize_phone,
-    )
-
-    if not is_valid_full_name(full_name):
-        raise ValueError(
-            "Enter a valid name using letters "
-            "(spaces and - ' . allowed between name parts)."
-        )
-    if not is_valid_email(email):
-        raise ValueError("Enter a valid email address (e.g. name@example.com).")
-    phone = normalize_phone(phone)
-    if not phone:
-        raise ValueError(
-            "Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)."
-        )
-    form_data["phone"] = phone
-
-    contact_result = upsert_contact_by_email_or_phone(
-        location_id,
-        full_name=full_name,
-        email=email,
-        phone=phone,
-        access_token=token,
-    )
-    contact_id = contact_result["contact_id"]
-
     pipe = resolve_loan_pipeline_stage(account, access_token=token)
     opp_name = build_opportunity_name(form_data)
-
     created_opportunity = False
-    if opportunity_id:
+    contact_created = False
+
+    if opportunity_id and lock_existing_contact:
+        linked = fetch_opportunity_linked_contact(opportunity_id, account=account)
+        if not linked or not linked.get("contact_id"):
+            raise ValueError(
+                "This opportunity has no associated contact in GHL. "
+                "Link a contact on the opportunity, then try again."
+            )
+        contact_id = linked["contact_id"]
+        # Prefer GHL contact details so the form cannot reassign / overwrite them
+        if linked.get("full_name"):
+            form_data["full_name"] = linked["full_name"]
+        if linked.get("email"):
+            form_data["email"] = linked["email"]
+        if linked.get("phone"):
+            form_data["phone"] = linked["phone"]
+
         opportunity = update_opportunity(
             opportunity_id,
             name=opp_name,
             pipeline_id=pipe["pipeline_id"],
             pipeline_stage_id=pipe["pipeline_stage_id"],
-            contact_id=contact_id,
             access_token=token,
         )
         if not opportunity.get("id"):
             opportunity = {"id": opportunity_id, **(opportunity or {})}
     else:
-        opportunity = create_opportunity(
+        full_name = (form_data.get("full_name") or "").strip()
+        email = (form_data.get("email") or "").strip()
+        phone = (form_data.get("phone") or "").strip()
+        if not full_name or not email or not phone:
+            raise ValueError("Full Name, Email, and Phone are required.")
+
+        from documents.contact_validation import (
+            is_valid_email,
+            is_valid_full_name,
+            normalize_phone,
+        )
+
+        if not is_valid_full_name(full_name):
+            raise ValueError(
+                "Enter a valid name using letters "
+                "(spaces and - ' . allowed between name parts)."
+            )
+        if not is_valid_email(email):
+            raise ValueError("Enter a valid email address (e.g. name@example.com).")
+        phone = normalize_phone(phone)
+        if not phone:
+            raise ValueError(
+                "Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)."
+            )
+        form_data["phone"] = phone
+
+        contact_result = upsert_contact_by_email_or_phone(
             location_id,
-            contact_id=contact_id,
-            pipeline_id=pipe["pipeline_id"],
-            pipeline_stage_id=pipe["pipeline_stage_id"],
-            name=opp_name,
-            status="open",
+            full_name=full_name,
+            email=email,
+            phone=phone,
             access_token=token,
         )
-        opportunity_id = opportunity.get("id")
-        if not opportunity_id:
-            raise RuntimeError(f"GHL create opportunity returned no id: {opportunity}")
-        created_opportunity = True
+        contact_id = contact_result["contact_id"]
+        contact_created = bool(contact_result.get("created"))
+
+        if opportunity_id:
+            opportunity = update_opportunity(
+                opportunity_id,
+                name=opp_name,
+                pipeline_id=pipe["pipeline_id"],
+                pipeline_stage_id=pipe["pipeline_stage_id"],
+                contact_id=contact_id,
+                access_token=token,
+            )
+            if not opportunity.get("id"):
+                opportunity = {"id": opportunity_id, **(opportunity or {})}
+        else:
+            opportunity = create_opportunity(
+                location_id,
+                contact_id=contact_id,
+                pipeline_id=pipe["pipeline_id"],
+                pipeline_stage_id=pipe["pipeline_stage_id"],
+                name=opp_name,
+                status="open",
+                access_token=token,
+            )
+            opportunity_id = opportunity.get("id")
+            if not opportunity_id:
+                raise RuntimeError(
+                    f"GHL create opportunity returned no id: {opportunity}"
+                )
+            created_opportunity = True
 
     summary = {
         "contact_id": contact_id,
-        "contact_created": contact_result.get("created"),
+        "contact_created": contact_created,
         "opportunity_id": opportunity_id,
         "opportunity_created": created_opportunity,
         "opportunity_name": opp_name,
         "location_id": location_id,
         "pipeline_id": pipe["pipeline_id"],
         "pipeline_stage_id": pipe["pipeline_stage_id"],
+        "contact_locked": bool(opportunity_id and lock_existing_contact),
         "account": account,
     }
     logger.info("Loan Quote Survey contact/opportunity ready: %s", {

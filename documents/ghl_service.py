@@ -308,6 +308,20 @@ def lookup_duplicate_contact(location_id, email=None, phone=None, access_token=N
     return contact or None
 
 
+def get_contact(contact_id, access_token=None):
+    """
+    Fetch a GHL contact by id.
+    GET /contacts/{contactId}
+    :return: contact dict
+    """
+    headers = _auth_headers(access_token)
+    url = f"{GHL_CONTACTS_BASE}/{contact_id}"
+    resp = requests.get(url, headers=headers, timeout=30)
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    return data.get("contact") or data
+
+
 def create_contact(location_id, full_name=None, email=None, phone=None, access_token=None):
     """
     Create a GHL contact.

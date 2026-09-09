@@ -300,6 +300,116 @@
             font-style: italic;
         }
 
+        .form-header-bar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            text-align: left;
+        }
+        .form-header-bar .header-copy { flex: 1; min-width: 0; }
+        .form-header-bar h1 { text-align: left; }
+        .form-header-bar p { text-align: left; }
+        .btn-edit {
+            flex-shrink: 0;
+            border: 1px solid var(--primary);
+            background: #fff;
+            color: var(--primary);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-edit:hover { background: #e8f1fb; }
+
+        .gate-panel, .review-panel {
+            padding: 28px 40px 36px;
+        }
+        .gate-card {
+            border: 1px solid var(--section-border);
+            border-radius: var(--radius);
+            background: linear-gradient(180deg, #fff 0%, var(--section-bg) 100%);
+            padding: 28px 24px;
+            text-align: center;
+        }
+        .gate-card h2 {
+            font-size: 1.15rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        .gate-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            max-width: 34rem;
+            margin: 0 auto 20px;
+        }
+        .btn-stage {
+            border: 0;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 12px 18px;
+            cursor: pointer;
+        }
+        .btn-stage:disabled { opacity: 0.65; cursor: wait; }
+        .btn-stage.secondary {
+            background: #0f2744;
+            margin-top: 12px;
+        }
+        .stage-chip {
+            display: inline-flex;
+            margin-top: 10px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #e8f1fb;
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .review-section {
+            margin-bottom: 18px;
+            border: 1px solid var(--section-border);
+            border-radius: var(--radius);
+            background: var(--section-bg);
+            overflow: hidden;
+        }
+        .review-section h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--section-border);
+            background: #fff;
+        }
+        .review-rows { padding: 4px 0; }
+        .review-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 38%) 1fr;
+            gap: 12px;
+            padding: 10px 16px;
+            border-bottom: 1px solid #e8f0f7;
+            font-size: 14px;
+        }
+        .review-row:last-child { border-bottom: 0; }
+        .review-row .label { color: var(--text-muted); font-weight: 600; }
+        .review-row .value { color: var(--text); font-weight: 600; word-break: break-word; }
+        .review-actions {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--section-border);
+        }
+        .form-edit-wrap.hidden-mode { display: none; }
+        .mode-hidden { display: none !important; }
+
         @media (max-width: 640px) {
             body { padding: 16px 12px 32px; }
             .form-header, .form-body { padding-left: 20px; padding-right: 20px; }
@@ -314,14 +424,34 @@
     <div class="page-container">
         <div class="form-card">
             <div class="form-header">
-                <h1>Quick App Submission Form</h1>
-                <p>Step <span id="step-label">1</span> of {{ total_steps|default:4 }} — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
-                <div class="step-indicator" aria-hidden="true">
+                <div class="form-header-bar">
+                    <div class="header-copy">
+                        <h1>Quick App Submission Form</h1>
+                        {% if is_public or view_mode == 'edit' %}
+                        <p>Step <span id="step-label">1</span> of {{ total_steps|default:4 }} — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
+                        {% elif view_mode == 'under_review_gate' %}
+                        <p>Submission received — change status to review the form</p>
+                        {% else %}
+                        <p>Review submitted details{% if stage_name %} · Stage: {{ stage_name }}{% endif %}</p>
+                        {% endif %}
+                        {% if pipeline_name or stage_name %}
+                        <span class="stage-chip">{{ pipeline_name|default:"Pipeline" }}{% if stage_name %} · {{ stage_name }}{% endif %}</span>
+                        {% endif %}
+                    </div>
+                    {% if view_mode == 'review' and not is_public %}
+                    <a class="btn-edit" href="?edit=1">Edit</a>
+                    {% elif view_mode == 'edit' and not is_public %}
+                    <a class="btn-edit" href="?">Cancel</a>
+                    {% endif %}
+                </div>
+                {% if is_public or view_mode == 'edit' %}
+                <div class="step-indicator" aria-hidden="true" id="step-indicator">
                     <span class="step-dot active" data-step="1"></span>
                     <span class="step-dot" data-step="2"></span>
                     <span class="step-dot" data-step="3"></span>
                     <span class="step-dot" data-step="4"></span>
                 </div>
+                {% endif %}
             </div>
 
             {% if success %}
@@ -331,6 +461,49 @@
             <div class="success-message" role="alert" style="background:#ffebee;color:#c62828;border-color:#ef9a9a;">{{ error }}</div>
             {% endif %}
 
+            {% if view_mode == 'under_review_gate' and not is_public %}
+            <div class="gate-panel" id="under-review-gate">
+                <div class="gate-card">
+                    <h2>Ready to review?</h2>
+                    <p>Change this opportunity status to Under Review to review the submitted form.</p>
+                    <button type="button" class="btn-stage" id="btn-under-review">Change status to Under Review</button>
+                    <div id="gate-error" style="display:none;margin-top:14px;color:#c62828;font-size:13px;"></div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if view_mode == 'review' and not is_public %}
+            <div class="review-panel" id="review-panel">
+                {% for section_title, rows in review_sections %}
+                <div class="review-section">
+                    <h3>{{ section_title }}</h3>
+                    <div class="review-rows">
+                        {% for label, value in rows %}
+                        <div class="review-row">
+                            <div class="label">{{ label }}</div>
+                            <div class="value">{{ value }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="gate-card">
+                    <p>No submission data found yet.</p>
+                </div>
+                {% endfor %}
+
+                {% if show_processing_btn %}
+                <div class="review-actions">
+                    <button type="button" class="btn-stage secondary" id="btn-processing-pipeline">
+                        Change this opportunity to 02 Processing pipeline, stage: DOCUMENT UPLOADED
+                    </button>
+                    <div id="processing-error" style="display:none;margin-top:10px;color:#c62828;font-size:13px;"></div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="form-edit-wrap {% if not is_public and view_mode != 'edit' %}hidden-mode{% endif %}" id="form-edit-wrap">
             <form id="opportunity-form" class="form-body" method="post" action="" novalidate>
                 {% csrf_token %}
                 {% if location_id %}
@@ -689,6 +862,7 @@
                     <button type="submit" class="btn-nav primary" id="btn-submit" style="display:none;">SUBMIT</button>
                 </div>
             </form>
+            </div>
         </div>
     </div>
 
@@ -698,6 +872,66 @@
             var currentStep = 1;
             var totalSteps = {{ total_steps|default:4 }};
             var contactLocked = {{ contact_locked|yesno:"true,false" }};
+            var requestId = "{{ request_id|escapejs }}";
+            var viewMode = "{{ view_mode|escapejs }}";
+
+            function withLoc(url) {
+                var id = new URLSearchParams(window.location.search).get('location_id');
+                if (!id) return url;
+                return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'location_id=' + encodeURIComponent(id);
+            }
+
+            var btnUnder = document.getElementById('btn-under-review');
+            if (btnUnder) {
+                btnUnder.addEventListener('click', async function() {
+                    var errEl = document.getElementById('gate-error');
+                    errEl.style.display = 'none';
+                    btnUnder.disabled = true;
+                    try {
+                        var res = await fetch(withLoc('/api/' + requestId + '/opportunity/stage/under-review/'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}'
+                        });
+                        var data = await res.json().catch(function() { return {}; });
+                        if (!res.ok) throw new Error(data.error || 'Failed to change status');
+                        window.location.href = window.location.pathname + (window.location.search || '');
+                    } catch (e) {
+                        errEl.textContent = e.message || 'Failed to change status';
+                        errEl.style.display = 'block';
+                        btnUnder.disabled = false;
+                    }
+                });
+            }
+
+            var btnProc = document.getElementById('btn-processing-pipeline');
+            if (btnProc) {
+                btnProc.addEventListener('click', async function() {
+                    var errEl = document.getElementById('processing-error');
+                    errEl.style.display = 'none';
+                    btnProc.disabled = true;
+                    try {
+                        var res = await fetch(withLoc('/api/' + requestId + '/opportunity/pipeline/processing-document-uploaded/'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}'
+                        });
+                        var data = await res.json().catch(function() { return {}; });
+                        if (!res.ok) throw new Error(data.error || 'Failed to change pipeline');
+                        window.location.reload();
+                    } catch (e) {
+                        errEl.textContent = e.message || 'Failed to change pipeline';
+                        errEl.style.display = 'block';
+                        btnProc.disabled = false;
+                    }
+                });
+            }
+
+            // Edit / public form wizard — skip if form panel hidden
+            var wrap = document.getElementById('form-edit-wrap');
+            if (!form || (wrap && wrap.classList.contains('hidden-mode'))) {
+                return;
+            }
 
             function getTriggerValue(fieldName) {
                 var el = form.querySelector('[name="' + fieldName + '"]');

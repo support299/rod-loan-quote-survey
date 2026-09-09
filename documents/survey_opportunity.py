@@ -18,8 +18,16 @@ from documents.ghl_service import (
 
 logger = logging.getLogger(__name__)
 
+# 01 Loan Pipeline stages
 GHL_LOAN_PIPELINE_NAME = "01 Loan Pipeline"
 GHL_QUICK_APP_STAGE_NAME = "quick app submitted"
+GHL_UNDER_REVIEW_STAGE_NAME = "Under Review"
+GHL_TERMSHEET_SENT_STAGE_NAME = "TERMSHEET SENT"
+GHL_TERMSHEET_ACCEPTED_STAGE_NAME = "TERMSHEET ACCEPTED/SECURE LINK"
+
+# 02 Processing Pipeline
+GHL_PROCESSING_PIPELINE_NAME = "02 Processing Pipeline"
+GHL_DOCUMENT_UPLOADED_STAGE_NAME = "DOCUMENT UPLOADED"
 
 _PIPELINE_CACHE_TTL = 60 * 60 * 24  # 24 hours
 
@@ -38,33 +46,36 @@ def get_default_ghl_account():
     )
 
 
-def resolve_loan_pipeline_stage(account, access_token=None):
+def resolve_pipeline_stage(account, pipeline_name, stage_name, access_token=None):
     """
-    Look up pipeline "01 Loan Pipeline" and stage "quick app submitted" by exact name.
-    Cache ids on Django cache.
+    Look up pipeline + stage by exact display name (case/spacing insensitive).
+    Cached per location + pipeline + stage.
 
-    :return: dict {pipeline_id, pipeline_stage_id, location_id}
+    :return: dict {pipeline_id, pipeline_stage_id, location_id, pipeline_name, stage_name}
     """
     token = access_token or account.access_token
     location_id = account.location_id
-    cache_key = f"ghl_loan_pipeline_stage:{location_id}"
+    cache_key = (
+        f"ghl_pipe_stage:{location_id}:"
+        f"{_normalize_name(pipeline_name)}:{_normalize_name(stage_name)}"
+    )
     cached = cache.get(cache_key)
     if cached and cached.get("pipeline_id") and cached.get("pipeline_stage_id"):
         return cached
 
     pipelines = list_pipelines(location_id, access_token=token)
     pipeline = None
-    target_pipe = _normalize_name(GHL_LOAN_PIPELINE_NAME)
+    target_pipe = _normalize_name(pipeline_name)
     for p in pipelines:
         if _normalize_name(p.get("name")) == target_pipe:
             pipeline = p
             break
     if not pipeline:
         raise ValueError(
-            f'GHL pipeline "{GHL_LOAN_PIPELINE_NAME}" not found for location {location_id}'
+            f'GHL pipeline "{pipeline_name}" not found for location {location_id}'
         )
 
-    target_stage = _normalize_name(GHL_QUICK_APP_STAGE_NAME)
+    target_stage = _normalize_name(stage_name)
     stage = None
     for s in pipeline.get("stages") or []:
         if _normalize_name(s.get("name")) == target_stage:
@@ -72,25 +83,225 @@ def resolve_loan_pipeline_stage(account, access_token=None):
             break
     if not stage or not stage.get("id"):
         raise ValueError(
-            f'GHL stage "{GHL_QUICK_APP_STAGE_NAME}" not found on pipeline '
-            f'"{GHL_LOAN_PIPELINE_NAME}"'
+            f'GHL stage "{stage_name}" not found on pipeline "{pipeline_name}"'
         )
 
     result = {
         "pipeline_id": pipeline["id"],
         "pipeline_stage_id": stage["id"],
         "location_id": location_id,
-        "pipeline_name": pipeline.get("name"),
-        "stage_name": stage.get("name"),
+        "pipeline_name": pipeline.get("name") or pipeline_name,
+        "stage_name": stage.get("name") or stage_name,
     }
     cache.set(cache_key, result, _PIPELINE_CACHE_TTL)
     logger.info(
-        "Resolved GHL pipeline/stage for %s: pipeline=%s stage=%s",
+        "Resolved GHL pipeline/stage for %s: %s / %s (%s / %s)",
         location_id,
+        result["pipeline_name"],
+        result["stage_name"],
         result["pipeline_id"],
         result["pipeline_stage_id"],
     )
     return result
+
+
+def resolve_loan_pipeline_stage(account, access_token=None):
+    """Backward-compatible: 01 Loan Pipeline → quick app submitted."""
+    return resolve_pipeline_stage(
+        account,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_QUICK_APP_STAGE_NAME,
+        access_token=access_token,
+    )
+
+
+def get_opportunity_pipeline_info(opportunity_id, account=None, access_token=None):
+    """
+    Load opportunity and resolve current pipeline/stage names from location pipelines.
+    """
+    account = account or get_default_ghl_account()
+    if not account or not opportunity_id:
+        return None
+    token = access_token or account.access_token
+    opp_data = get_opportunity(opportunity_id, access_token=token)
+    opportunity = opp_data.get("opportunity") or {}
+    pipeline_id = opportunity.get("pipelineId") or opportunity.get("pipeline_id")
+    stage_id = (
+        opportunity.get("pipelineStageId")
+        or opportunity.get("pipeline_stage_id")
+        or opportunity.get("statusId")
+    )
+    pipeline_name = ""
+    stage_name = ""
+    try:
+        pipelines = list_pipelines(account.location_id, access_token=token)
+        for p in pipelines:
+            if p.get("id") == pipeline_id:
+                pipeline_name = p.get("name") or ""
+                for s in p.get("stages") or []:
+                    if s.get("id") == stage_id:
+                        stage_name = s.get("name") or ""
+                        break
+                break
+    except Exception as e:
+        logger.warning(
+            "Failed to resolve pipeline names for opportunity %s: %s",
+            opportunity_id,
+            e,
+            exc_info=True,
+        )
+
+    return {
+        "opportunity": opportunity,
+        "opportunity_id": opportunity_id,
+        "contact_id": opportunity.get("contactId"),
+        "pipeline_id": pipeline_id,
+        "pipeline_stage_id": stage_id,
+        "pipeline_name": pipeline_name,
+        "stage_name": stage_name,
+        "stage_key": _normalize_name(stage_name),
+        "pipeline_key": _normalize_name(pipeline_name),
+        "account": account,
+    }
+
+
+def stage_matches(stage_name, expected):
+    return _normalize_name(stage_name) == _normalize_name(expected)
+
+
+def move_opportunity_to_stage(
+    opportunity_id,
+    pipeline_name,
+    stage_name,
+    account=None,
+    access_token=None,
+    only_from_stages=None,
+):
+    """
+    Move opportunity to pipeline_name / stage_name.
+    If only_from_stages is set, skip unless current stage matches one of them.
+    """
+    account = account or get_default_ghl_account()
+    if not account:
+        raise ValueError("No GHLAuthCredentials installed")
+    token = access_token or account.access_token
+
+    info = get_opportunity_pipeline_info(opportunity_id, account=account, access_token=token)
+    if not info:
+        raise ValueError(f"Could not load opportunity {opportunity_id}")
+
+    current_stage = info.get("stage_name") or ""
+    if only_from_stages:
+        allowed = [_normalize_name(s) for s in only_from_stages]
+        if _normalize_name(current_stage) not in allowed:
+            logger.info(
+                "Skip stage move for %s: current '%s' not in %s",
+                opportunity_id,
+                current_stage,
+                only_from_stages,
+            )
+            return {
+                "success": False,
+                "skipped": True,
+                "reason": "stage_mismatch",
+                "current_stage": current_stage,
+                "target_stage": stage_name,
+                "target_pipeline": pipeline_name,
+            }
+
+    target = resolve_pipeline_stage(
+        account, pipeline_name, stage_name, access_token=token
+    )
+    if (
+        info.get("pipeline_id") == target["pipeline_id"]
+        and info.get("pipeline_stage_id") == target["pipeline_stage_id"]
+    ):
+        return {
+            "success": True,
+            "skipped": True,
+            "reason": "already_there",
+            "current_stage": current_stage,
+            "target_stage": target["stage_name"],
+            "target_pipeline": target["pipeline_name"],
+        }
+
+    update_opportunity(
+        opportunity_id,
+        pipeline_id=target["pipeline_id"],
+        pipeline_stage_id=target["pipeline_stage_id"],
+        access_token=token,
+    )
+    logger.info(
+        "Moved opportunity %s to %s / %s (from %s / %s)",
+        opportunity_id,
+        target["pipeline_name"],
+        target["stage_name"],
+        info.get("pipeline_name"),
+        current_stage,
+    )
+    return {
+        "success": True,
+        "skipped": False,
+        "current_stage": current_stage,
+        "target_stage": target["stage_name"],
+        "target_pipeline": target["pipeline_name"],
+        "pipeline_id": target["pipeline_id"],
+        "pipeline_stage_id": target["pipeline_stage_id"],
+    }
+
+
+def move_to_under_review(opportunity_id, account=None):
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_UNDER_REVIEW_STAGE_NAME,
+        account=account,
+        only_from_stages=[GHL_QUICK_APP_STAGE_NAME],
+    )
+
+
+def move_to_termsheet_sent(opportunity_id, account=None):
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_TERMSHEET_SENT_STAGE_NAME,
+        account=account,
+        only_from_stages=[GHL_UNDER_REVIEW_STAGE_NAME],
+    )
+
+
+def rollback_to_termsheet_sent(opportunity_id, account=None):
+    """
+    TERMSHEET ACCEPTED/SECURE LINK → TERMSHEET SENT when an accepted upload
+    is later rejected (or otherwise no longer fully accepted).
+    """
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_TERMSHEET_SENT_STAGE_NAME,
+        account=account,
+        only_from_stages=[GHL_TERMSHEET_ACCEPTED_STAGE_NAME],
+    )
+
+
+def move_to_termsheet_accepted(opportunity_id, account=None):
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
+        account=account,
+        only_from_stages=[GHL_TERMSHEET_SENT_STAGE_NAME],
+    )
+
+
+def move_to_processing_document_uploaded(opportunity_id, account=None):
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_PROCESSING_PIPELINE_NAME,
+        GHL_DOCUMENT_UPLOADED_STAGE_NAME,
+        account=account,
+        only_from_stages=[GHL_TERMSHEET_ACCEPTED_STAGE_NAME],
+    )
 
 
 def build_opportunity_name(form_data):
@@ -159,12 +370,9 @@ def ensure_contact_and_opportunity(
     """
     Upsert GHL contact (email then phone), then create or update opportunity.
 
-    - opportunity_id is None  → always CREATE a new opportunity
-    - opportunity_id set      → UPDATE that opportunity
-    - lock_existing_contact   → keep opportunity's current contact (no upsert /
-      reassignment). Used for the GHL-embedded /{id}/opportunity-card/ form.
-
-    :return: dict with contact_id, opportunity_id, location_id, created_opportunity, ...
+    - opportunity_id is None  → CREATE opportunity at quick app submitted
+    - opportunity_id set      → UPDATE name (do not reset stage)
+    - lock_existing_contact   → keep opportunity's current contact
     """
     account = account or get_default_ghl_account()
     if not account:
@@ -174,10 +382,10 @@ def ensure_contact_and_opportunity(
     location_id = account.location_id
     form_data = form_data or {}
 
-    pipe = resolve_loan_pipeline_stage(account, access_token=token)
     opp_name = build_opportunity_name(form_data)
     created_opportunity = False
     contact_created = False
+    pipe = None
 
     if opportunity_id and lock_existing_contact:
         linked = fetch_opportunity_linked_contact(opportunity_id, account=account)
@@ -187,7 +395,6 @@ def ensure_contact_and_opportunity(
                 "Link a contact on the opportunity, then try again."
             )
         contact_id = linked["contact_id"]
-        # Prefer GHL contact details so the form cannot reassign / overwrite them
         if linked.get("full_name"):
             form_data["full_name"] = linked["full_name"]
         if linked.get("email"):
@@ -198,8 +405,6 @@ def ensure_contact_and_opportunity(
         opportunity = update_opportunity(
             opportunity_id,
             name=opp_name,
-            pipeline_id=pipe["pipeline_id"],
-            pipeline_stage_id=pipe["pipeline_stage_id"],
             access_token=token,
         )
         if not opportunity.get("id"):
@@ -245,14 +450,13 @@ def ensure_contact_and_opportunity(
             opportunity = update_opportunity(
                 opportunity_id,
                 name=opp_name,
-                pipeline_id=pipe["pipeline_id"],
-                pipeline_stage_id=pipe["pipeline_stage_id"],
                 contact_id=contact_id,
                 access_token=token,
             )
             if not opportunity.get("id"):
                 opportunity = {"id": opportunity_id, **(opportunity or {})}
         else:
+            pipe = resolve_loan_pipeline_stage(account, access_token=token)
             opportunity = create_opportunity(
                 location_id,
                 contact_id=contact_id,
@@ -276,8 +480,8 @@ def ensure_contact_and_opportunity(
         "opportunity_created": created_opportunity,
         "opportunity_name": opp_name,
         "location_id": location_id,
-        "pipeline_id": pipe["pipeline_id"],
-        "pipeline_stage_id": pipe["pipeline_stage_id"],
+        "pipeline_id": (pipe or {}).get("pipeline_id"),
+        "pipeline_stage_id": (pipe or {}).get("pipeline_stage_id"),
         "contact_locked": bool(opportunity_id and lock_existing_contact),
         "account": account,
     }

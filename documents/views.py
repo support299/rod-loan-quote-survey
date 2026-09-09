@@ -921,6 +921,11 @@ def _opportunity_card_form_context(
     is_public=False,
     contact_locked=False,
     linked_contact=None,
+    view_mode='edit',
+    review_sections=None,
+    pipeline_name='',
+    stage_name='',
+    show_processing_btn=False,
 ):
     linked_contact = linked_contact or {}
     return {
@@ -933,9 +938,81 @@ def _opportunity_card_form_context(
         'is_public': is_public,
         'contact_locked': contact_locked,
         'linked_contact': linked_contact,
+        'view_mode': view_mode,
+        'review_sections': review_sections or [],
+        'pipeline_name': pipeline_name or '',
+        'stage_name': stage_name or '',
+        'show_processing_btn': show_processing_btn,
         'ae_options': OPPORTUNITY_CARD_AE_OPTIONS,
         'total_steps': 4,
     }
+
+
+def _maybe_move_to_termsheet_sent(request_id, account=None):
+    """When any document is requested, Under Review → TERMSHEET SENT."""
+    try:
+        from .survey_opportunity import get_default_ghl_account, move_to_termsheet_sent
+
+        account = account or get_default_ghl_account()
+        return move_to_termsheet_sent(request_id, account=account)
+    except Exception as e:
+        logger.warning(
+            "Failed TERMSHEET SENT move for %s: %s", request_id, e, exc_info=True
+        )
+        return {"success": False, "error": str(e)}
+
+
+def _all_requested_documents_accepted(doc_request):
+    """
+    True when every non-needs_list selection has ≥1 upload and all uploads are accepted.
+    """
+    selections = (
+        AdminDocumentSelection.objects.filter(request=doc_request)
+        .exclude(section_type="needs_list")
+        .prefetch_related("user_uploads")
+    )
+    if not selections.exists():
+        return False
+    for sel in selections:
+        uploads = list(sel.user_uploads.all())
+        if not uploads:
+            return False
+        if not all(bool(u.accepted) for u in uploads):
+            return False
+    return True
+
+
+def _maybe_move_to_termsheet_accepted(request_id, doc_request, account=None):
+    """When all requested docs are accepted, TERMSHEET SENT → TERMSHEET ACCEPTED."""
+    if not _all_requested_documents_accepted(doc_request):
+        return {"success": False, "skipped": True, "reason": "not_all_accepted"}
+    try:
+        from .survey_opportunity import get_default_ghl_account, move_to_termsheet_accepted
+
+        account = account or get_default_ghl_account()
+        return move_to_termsheet_accepted(request_id, account=account)
+    except Exception as e:
+        logger.warning(
+            "Failed TERMSHEET ACCEPTED move for %s: %s", request_id, e, exc_info=True
+        )
+        return {"success": False, "error": str(e)}
+
+
+def _maybe_rollback_to_termsheet_sent(request_id, account=None):
+    """
+    If stage is TERMSHEET ACCEPTED/SECURE LINK and a doc is rejected (or no longer
+    fully accepted), roll back to TERMSHEET SENT.
+    """
+    try:
+        from .survey_opportunity import get_default_ghl_account, rollback_to_termsheet_sent
+
+        account = account or get_default_ghl_account()
+        return rollback_to_termsheet_sent(request_id, account=account)
+    except Exception as e:
+        logger.warning(
+            "Failed TERMSHEET SENT rollback for %s: %s", request_id, e, exc_info=True
+        )
+        return {"success": False, "error": str(e)}
 
 
 def _create_survey_contact_note(request, submission, request_id, contact_id, access_token=None):
@@ -1073,15 +1150,72 @@ def loan_quote_survey_form(request):
 
 def _bound_opportunity_card_context(request, request_id, **overrides):
     """Context for GHL-embedded /{id}/opportunity-card/ with locked linked contact."""
-    from .survey_opportunity import fetch_opportunity_linked_contact, get_default_ghl_account
+    from .survey_opportunity import (
+        GHL_QUICK_APP_STAGE_NAME,
+        GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
+        fetch_opportunity_linked_contact,
+        get_default_ghl_account,
+        get_opportunity_pipeline_info,
+        stage_matches,
+    )
 
     account = get_default_ghl_account()
     linked = fetch_opportunity_linked_contact(request_id, account=account) or {}
     initial = overrides.pop('initial', None) or {}
-    # Always prefer live GHL contact on the bound form
     for key in ('full_name', 'email', 'phone'):
         if linked.get(key):
             initial[key] = linked[key]
+
+    pipeline_name = ''
+    stage_name = ''
+    try:
+        info = get_opportunity_pipeline_info(request_id, account=account) or {}
+        pipeline_name = info.get('pipeline_name') or ''
+        stage_name = info.get('stage_name') or ''
+    except Exception as e:
+        logger.warning(
+            "Could not load pipeline info for opportunity card %s: %s",
+            request_id,
+            e,
+            exc_info=True,
+        )
+
+    has_submission = bool(initial) and any(
+        str(initial.get(k) or '').strip()
+        for k in (
+            'entity_name',
+            'subject_property_address',
+            'account_executive',
+            'fico_score',
+            'broker_or_borrower',
+        )
+    )
+
+    forced_mode = overrides.pop('view_mode', None)
+    want_edit = (request.GET.get('edit') == '1') or (forced_mode == 'edit')
+
+    if forced_mode == 'edit':
+        view_mode = 'edit'
+    elif forced_mode == 'under_review_gate':
+        view_mode = 'under_review_gate'
+    elif forced_mode == 'review':
+        view_mode = 'review'
+    elif not has_submission:
+        view_mode = 'edit'
+    elif stage_matches(stage_name, GHL_QUICK_APP_STAGE_NAME):
+        view_mode = 'under_review_gate'
+    elif want_edit:
+        view_mode = 'edit'
+    else:
+        view_mode = 'review'
+
+    review_sections = []
+    if view_mode in ('review', 'under_review_gate') and initial:
+        review_sections = _opportunity_submission_sections(initial)
+
+    show_processing_btn = stage_matches(stage_name, GHL_TERMSHEET_ACCEPTED_STAGE_NAME)
+
+    error = overrides.pop('error', '')
     ctx = _opportunity_card_form_context(
         request_id=request_id,
         initial=initial,
@@ -1092,25 +1226,88 @@ def _bound_opportunity_card_context(request, request_id, **overrides):
         contact_locked=True,
         linked_contact=linked,
         is_public=False,
+        view_mode=view_mode,
+        review_sections=review_sections,
+        pipeline_name=pipeline_name,
+        stage_name=stage_name,
+        show_processing_btn=show_processing_btn,
+        error=error,
         **overrides,
     )
-    if not linked.get('contact_id') and not overrides.get('error'):
+    if not linked.get('contact_id') and not ctx.get('error'):
         ctx['error'] = (
-            ctx.get('error')
-            or 'No contact is linked to this opportunity in GHL yet. '
-               'Associate a contact on the opportunity, then refresh this form.'
+            'No contact is linked to this opportunity in GHL yet. '
+            'Associate a contact on the opportunity, then refresh this form.'
         )
     return ctx
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def opportunity_move_under_review(request, request_id):
+    """POST /api/{request_id}/opportunity/stage/under-review/"""
+    from .survey_opportunity import get_default_ghl_account, move_to_under_review
+
+    account = get_default_ghl_account()
+    if not account:
+        return JsonResponse({"error": "GHL account is not configured."}, status=500)
+    try:
+        result = move_to_under_review(request_id, account=account)
+        if result.get("skipped") and result.get("reason") == "stage_mismatch":
+            return JsonResponse(
+                {
+                    "error": (
+                        "Opportunity must be in Quick App Submitted to move to Under Review "
+                        f"(current: {result.get('current_stage') or 'unknown'})."
+                    ),
+                    **result,
+                },
+                status=409,
+            )
+        return JsonResponse({"success": True, **result})
+    except Exception as e:
+        logger.exception("Under Review move failed for %s", request_id)
+        return JsonResponse({"error": str(e)}, status=502)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def opportunity_move_processing_document_uploaded(request, request_id):
+    """POST /api/{request_id}/opportunity/pipeline/processing-document-uploaded/"""
+    from .survey_opportunity import (
+        get_default_ghl_account,
+        move_to_processing_document_uploaded,
+    )
+
+    account = get_default_ghl_account()
+    if not account:
+        return JsonResponse({"error": "GHL account is not configured."}, status=500)
+    try:
+        result = move_to_processing_document_uploaded(request_id, account=account)
+        if result.get("skipped") and result.get("reason") == "stage_mismatch":
+            return JsonResponse(
+                {
+                    "error": (
+                        "Opportunity must be in TERMSHEET ACCEPTED/SECURE LINK before "
+                        "moving to 02 Processing / DOCUMENT UPLOADED "
+                        f"(current: {result.get('current_stage') or 'unknown'})."
+                    ),
+                    **result,
+                },
+                status=409,
+            )
+        return JsonResponse({"success": True, **result})
+    except Exception as e:
+        logger.exception("Processing pipeline move failed for %s", request_id)
+        return JsonResponse({"error": str(e)}, status=502)
+
+
+@csrf_exempt
 def opportunity_card_form(request, request_id):
     """
-    Opportunity Card – Loan Quote Survey Form with conditional fields.
-    URL: {request_id}/opportunity-card/
-    GHL-embedded: shows the opportunity's linked contact as read-only (does not
-    create/reassign contacts). Public website entry uses /loan-quote-survey/.
-    CSRF-exempt so the form works when embedded in an iframe on other origins (e.g. GoHighLevel).
+    Opportunity Card – Loan Quote Survey Form.
+    GHL-embedded: Under Review gate → single-page review → optional ?edit=1 (4 steps).
+    Contact always locked. Public entry: /loan-quote-survey/.
     """
     if request.method == 'POST':
         submission, created, opp_id, location_id, error = _submit_loan_quote_survey(
@@ -1126,6 +1323,7 @@ def opportunity_card_form(request, request_id):
                     initial=_parse_opportunity_card_post(request),
                     location_id=location_id or extract_location_id(request) or '',
                     error=error or 'Submission failed. Please try again.',
+                    view_mode='edit',
                 ),
             )
         return render(
@@ -1145,7 +1343,6 @@ def opportunity_card_form(request, request_id):
             ),
         )
 
-    # GET: show form
     initial = {}
     try:
         existing = OpportunityCardSubmission.objects.get(request_id=request_id)
@@ -1968,6 +2165,7 @@ def create_individual_document(request, request_id):
         _sync_requested_documents_to_ghl(
             request, doc_request, request_id, json_body=data
         )
+        _maybe_move_to_termsheet_sent(request_id)
 
         return JsonResponse(
             {
@@ -2328,6 +2526,7 @@ def save_admin_selections(request, request_id):
             ghl_ctx=ghl_ctx,
         )
         _sync_needs_list_upload_status_to_ghl(request, doc_request, json_body=data)
+        _maybe_move_to_termsheet_sent(request_id)
 
         return JsonResponse({
             'success': True,
@@ -2518,6 +2717,11 @@ def accept_user_upload(request, request_id, upload_id):
                 ]
             )
         
+        if accepted:
+            _maybe_move_to_termsheet_accepted(request_id, doc_request)
+        else:
+            _maybe_rollback_to_termsheet_sent(request_id)
+
         return JsonResponse({
             'success': True,
             'message': f'Document {"accepted" if accepted else "rejected"} successfully',
@@ -2572,6 +2776,8 @@ def user_upload_rejection_reason(request, request_id, upload_id):
                     "updated_at",
                 ]
             )
+            if not upload.accepted:
+                _maybe_rollback_to_termsheet_sent(request_id)
             return JsonResponse({
                 "success": True,
                 "message": "Rejection comment removed",
@@ -2601,6 +2807,7 @@ def user_upload_rejection_reason(request, request_id, upload_id):
                 "updated_at",
             ]
         )
+        _maybe_rollback_to_termsheet_sent(request_id)
         return JsonResponse({
             "success": True,
             "message": "Rejection reason updated",

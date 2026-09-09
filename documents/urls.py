@@ -6,6 +6,16 @@ urlpatterns = [
     path('loan-quote-survey/', views.loan_quote_survey_form, name='loan-quote-survey'),
     # Request-based URLs (with request_id)
     path('<str:request_id>/opportunity-card/', views.opportunity_card_form, name='opportunity-card-form'),
+    path(
+        'api/<str:request_id>/opportunity/stage/under-review/',
+        views.opportunity_move_under_review,
+        name='opportunity-move-under-review',
+    ),
+    path(
+        'api/<str:request_id>/opportunity/pipeline/processing-document-uploaded/',
+        views.opportunity_move_processing_document_uploaded,
+        name='opportunity-move-processing-document-uploaded',
+    ),
     path('<str:request_id>/opportunity-submission/', views.opportunity_submission_view, name='opportunity-submission-view'),
     path('<str:request_id>/opportunity-submission/pdf/', views.download_opportunity_submission_pdf, name='download-opportunity-submission-pdf'),
     path('<str:request_id>/request/admin/', views.homepage, name='admin-homepage'),

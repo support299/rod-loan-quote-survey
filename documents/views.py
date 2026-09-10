@@ -1167,29 +1167,10 @@ def _client_survey_context(request, request_id, **overrides):
         if linked.get(key):
             initial[key] = linked[key]
 
-    forced_mode = overrides.pop('view_mode', None)
-    want_edit = (request.GET.get('edit') == '1') or (forced_mode == 'edit')
-    has_submission = bool(initial) and any(
-        str(initial.get(k) or '').strip()
-        for k in (
-            'entity_name',
-            'subject_property_address',
-            'account_executive',
-            'fico_score',
-            'broker_or_borrower',
-        )
-    )
-
-    if forced_mode == 'edit' or (want_edit and has_submission):
-        view_mode = 'edit'
-    elif has_submission:
-        view_mode = 'review'
-    else:
-        view_mode = 'edit'
-
-    review_sections = []
-    if view_mode == 'review' and initial:
-        review_sections = _opportunity_submission_sections(initial)
+    overrides.pop('view_mode', None)
+    # Client confirmation is review-only — no edit UI
+    view_mode = 'review'
+    review_sections = _opportunity_submission_sections(initial) if initial else []
 
     error = overrides.pop('error', '')
     return _opportunity_card_form_context(
@@ -1221,33 +1202,9 @@ def loan_quote_survey_submission(request, request_id):
     Review (single page) + optional ?edit=1. No GHL stage/pipeline admin actions.
     """
     if request.method == 'POST':
-        submission, created, opp_id, location_id, error = _submit_loan_quote_survey(
-            request, opportunity_id=request_id
-        )
-        if error or not submission:
-            return render(
-                request,
-                'documents/opportunity_card_form.html',
-                _client_survey_context(
-                    request,
-                    request_id,
-                    initial=_parse_opportunity_card_post(request),
-                    location_id=location_id or extract_location_id(request) or '',
-                    error=error or 'Submission failed. Please try again.',
-                    view_mode='edit',
-                ),
-            )
-        return render(
-            request,
-            'documents/opportunity_card_form.html',
-            _client_survey_context(
-                request,
-                opp_id or request_id,
-                initial=submission.form_data or {},
-                success=True,
-                message='Quick App Submission Form submitted successfully.',
-                location_id=location_id or extract_location_id(request) or '',
-            ),
+        # Client portal is review-only; ignore edit/submit attempts
+        return redirect(
+            reverse('loan-quote-survey-submission', kwargs={'request_id': request_id})
         )
 
     initial = {}

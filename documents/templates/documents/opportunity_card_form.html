@@ -442,9 +442,9 @@
                           {% endif %}
                         {% endif %}
                     </div>
-                    {% if view_mode == 'review' and form_audience != 'public' %}
+                    {% if view_mode == 'review' and form_audience == 'ghl' %}
                     <a class="btn-edit" href="?edit=1">Edit</a>
-                    {% elif view_mode == 'edit' and form_audience != 'public' and request_id %}
+                    {% elif view_mode == 'edit' and form_audience == 'ghl' %}
                     <a class="btn-edit" href="?">Cancel</a>
                     {% endif %}
                 </div>

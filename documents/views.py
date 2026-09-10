@@ -951,7 +951,10 @@ def _opportunity_card_form_context(
 
 
 def _maybe_move_to_termsheet_sent(request_id, account=None):
-    """When any document is requested, Under Review → TERMSHEET SENT."""
+    """
+    When docs are requested: Under Review → TERMSHEET SENT, or
+    TERMSHEET ACCEPTED → TERMSHEET SENT (new request after full accept).
+    """
     try:
         from .survey_opportunity import get_default_ghl_account, move_to_termsheet_sent
 
@@ -984,6 +987,14 @@ def _all_requested_documents_accepted(doc_request):
     return True
 
 
+def _requested_selection_count(doc_request):
+    return (
+        AdminDocumentSelection.objects.filter(request=doc_request)
+        .exclude(section_type="needs_list")
+        .count()
+    )
+
+
 def _maybe_move_to_termsheet_accepted(request_id, doc_request, account=None):
     """When all requested docs are accepted, TERMSHEET SENT → TERMSHEET ACCEPTED."""
     if not _all_requested_documents_accepted(doc_request):
@@ -1013,6 +1024,22 @@ def _maybe_rollback_to_termsheet_sent(request_id, account=None):
     except Exception as e:
         logger.warning(
             "Failed TERMSHEET SENT rollback for %s: %s", request_id, e, exc_info=True
+        )
+        return {"success": False, "error": str(e)}
+
+
+def _maybe_rollback_to_under_review(request_id, doc_request, account=None):
+    """When every document request is cancelled → Under Review."""
+    if _requested_selection_count(doc_request) > 0:
+        return {"success": False, "skipped": True, "reason": "still_has_requests"}
+    try:
+        from .survey_opportunity import get_default_ghl_account, rollback_to_under_review
+
+        account = account or get_default_ghl_account()
+        return rollback_to_under_review(request_id, account=account)
+    except Exception as e:
+        logger.warning(
+            "Failed Under Review rollback for %s: %s", request_id, e, exc_info=True
         )
         return {"success": False, "error": str(e)}
 
@@ -2248,7 +2275,9 @@ def create_individual_document(request, request_id):
         _sync_requested_documents_to_ghl(
             request, doc_request, request_id, json_body=data
         )
-        _maybe_move_to_termsheet_sent(request_id)
+        # New / incomplete requests: Under Review or ACCEPTED → TERMSHEET SENT
+        if not _all_requested_documents_accepted(doc_request):
+            _maybe_move_to_termsheet_sent(request_id)
 
         return JsonResponse(
             {
@@ -2461,8 +2490,9 @@ def revoke_admin_selection(request, request_id, selection_id):
         _sync_requested_documents_to_ghl(request, doc_request, request_id)
         _sync_needs_list_upload_status_to_ghl(request, doc_request)
 
-        # Stage: if no longer fully accepted → roll back from ACCEPTED; else promote if complete
-        if _all_requested_documents_accepted(doc_request):
+        if _requested_selection_count(doc_request) == 0:
+            _maybe_rollback_to_under_review(request_id, doc_request)
+        elif _all_requested_documents_accepted(doc_request):
             _maybe_move_to_termsheet_accepted(request_id, doc_request)
         else:
             _maybe_rollback_to_termsheet_sent(request_id)
@@ -2664,7 +2694,9 @@ def save_admin_selections(request, request_id):
             ghl_ctx=ghl_ctx,
         )
         _sync_needs_list_upload_status_to_ghl(request, doc_request, json_body=data)
-        _maybe_move_to_termsheet_sent(request_id)
+        # New / incomplete requests: Under Review or ACCEPTED → TERMSHEET SENT
+        if not _all_requested_documents_accepted(doc_request):
+            _maybe_move_to_termsheet_sent(request_id)
 
         return JsonResponse({
             'success': True,

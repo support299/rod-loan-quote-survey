@@ -260,13 +260,37 @@ def move_to_under_review(opportunity_id, account=None):
     )
 
 
+def rollback_to_under_review(opportunity_id, account=None):
+    """
+    When all document requests are cancelled: TERMSHEET SENT or
+    TERMSHEET ACCEPTED/SECURE LINK SENT → Under Review.
+    """
+    return move_opportunity_to_stage(
+        opportunity_id,
+        GHL_LOAN_PIPELINE_NAME,
+        GHL_UNDER_REVIEW_STAGE_NAME,
+        account=account,
+        only_from_stages=[
+            GHL_TERMSHEET_SENT_STAGE_NAME,
+            GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
+        ],
+    )
+
+
 def move_to_termsheet_sent(opportunity_id, account=None):
+    """
+    Under Review → TERMSHEET SENT (first docs requested), or
+    TERMSHEET ACCEPTED/SECURE LINK SENT → TERMSHEET SENT (new docs after full accept).
+    """
     return move_opportunity_to_stage(
         opportunity_id,
         GHL_LOAN_PIPELINE_NAME,
         GHL_TERMSHEET_SENT_STAGE_NAME,
         account=account,
-        only_from_stages=[GHL_UNDER_REVIEW_STAGE_NAME],
+        only_from_stages=[
+            GHL_UNDER_REVIEW_STAGE_NAME,
+            GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
+        ],
     )
 
 

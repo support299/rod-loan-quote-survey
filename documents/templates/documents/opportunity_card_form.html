@@ -324,8 +324,42 @@
             text-decoration: none;
             display: inline-flex;
             align-items: center;
+            gap: 8px;
         }
         .btn-edit:hover { background: #e8f1fb; }
+        .btn-edit.is-loading,
+        .btn-edit[aria-disabled="true"] {
+            opacity: 0.7;
+            pointer-events: none;
+            cursor: wait;
+        }
+        .btn-edit .btn-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-download {
+            flex-shrink: 0;
+            border: 0;
+            background: var(--primary);
+            color: #fff;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-download:hover { background: #0d47a1; color: #fff; }
 
         .gate-panel, .review-panel {
             padding: 28px 40px 36px;
@@ -443,9 +477,11 @@
                         {% endif %}
                     </div>
                     {% if view_mode == 'review' and form_audience == 'ghl' %}
-                    <a class="btn-edit" href="?edit=1">Edit</a>
+                    <a class="btn-edit" id="btn-ghl-edit" href="?edit=1">Edit</a>
                     {% elif view_mode == 'edit' and form_audience == 'ghl' %}
-                    <a class="btn-edit" href="?">Cancel</a>
+                    <a class="btn-edit" id="btn-ghl-cancel" href="?">Cancel</a>
+                    {% elif view_mode == 'review' and form_audience == 'client' and request_id %}
+                    <a class="btn-download" href="{% url 'download-opportunity-submission-pdf' request_id=request_id %}" download>Download PDF</a>
                     {% endif %}
                 </div>
                 {% if is_public or view_mode == 'edit' %}
@@ -884,6 +920,31 @@
                 if (!id) return url;
                 return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'location_id=' + encodeURIComponent(id);
             }
+
+            function setNavBtnLoading(btn, loadingLabel) {
+                if (!btn || btn.getAttribute('aria-disabled') === 'true') return false;
+                btn.setAttribute('aria-disabled', 'true');
+                btn.classList.add('is-loading');
+                btn.dataset.originalHtml = btn.innerHTML;
+                btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>' + (loadingLabel || 'Loading…');
+                return true;
+            }
+
+            ['btn-ghl-edit', 'btn-ghl-cancel'].forEach(function(id) {
+                var btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('click', function(e) {
+                    if (btn.getAttribute('aria-disabled') === 'true') {
+                        e.preventDefault();
+                        return;
+                    }
+                    e.preventDefault();
+                    var label = id === 'btn-ghl-cancel' ? 'Cancelling…' : 'Loading…';
+                    if (!setNavBtnLoading(btn, label)) return;
+                    var href = btn.getAttribute('href') || '?';
+                    window.location.href = href;
+                });
+            });
 
             var btnUnder = document.getElementById('btn-under-review');
             if (btnUnder) {

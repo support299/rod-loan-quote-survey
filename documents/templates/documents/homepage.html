@@ -400,6 +400,10 @@
                     if (d.pending_count) chips += '<span class="chip chip-amber">' + d.pending_count + ' pending</span>';
                     if (d.accepted_count) chips += '<span class="chip chip-green">' + d.accepted_count + ' accepted</span>';
                     if (d.rejected_count) chips += '<span class="chip chip-rose">' + d.rejected_count + ' rejected</span>';
+                    var canCancel = d.can_cancel !== false && !(d.accepted_count > 0);
+                    var cancelBtn = canCancel
+                        ? '<button type="button" class="btn-revoke" data-selection-id="' + d.selection_id + '" data-name="' + escapeHtml(d.name) + '">Cancel request</button>'
+                        : '';
                     return (
                         '<div class="req-item" data-selection-id="' + d.selection_id + '">' +
                             '<div class="doc-meta">' +
@@ -409,7 +413,7 @@
                             '</div>' +
                             '<div class="req-side">' +
                                 '<span class="time">' + escapeHtml(formatDate(d.requested_at)) + '</span>' +
-                                '<button type="button" class="btn-revoke" data-selection-id="' + d.selection_id + '" data-name="' + escapeHtml(d.name) + '">Cancel request</button>' +
+                                cancelBtn +
                             '</div>' +
                         '</div>'
                     );
@@ -599,6 +603,7 @@
                             accepted_count: 0,
                             pending_count: 0,
                             rejected_count: 0,
+                            can_cancel: true,
                             requested_at: nowIso
                         });
                     });

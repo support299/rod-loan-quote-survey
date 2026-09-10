@@ -1597,6 +1597,7 @@ def homepage(request, request_id):
                 "accepted_count": accepted,
                 "pending_count": pending,
                 "rejected_count": rejected,
+                "can_cancel": accepted == 0,
                 "requested_at": sel.created_at.isoformat() if sel.created_at else None,
             }
         )
@@ -2432,6 +2433,17 @@ def delete_adhoc_document(request, request_id, selection_id):
             section_type='adhoc'
         )
         
+        if selection.user_uploads.filter(accepted=True).exists():
+            return JsonResponse(
+                {
+                    "error": (
+                        "Cannot delete a document request after an upload "
+                        "has been accepted by admin."
+                    )
+                },
+                status=400,
+            )
+
         document = selection.document
         selection_id_val = selection.id
         
@@ -2476,6 +2488,17 @@ def revoke_admin_selection(request, request_id, selection_id):
             return JsonResponse(
                 {"error": "Needs List selections are no longer supported."},
                 status=410,
+            )
+
+        if selection.user_uploads.filter(accepted=True).exists():
+            return JsonResponse(
+                {
+                    "error": (
+                        "Cannot cancel a document request after an upload "
+                        "has been accepted by admin."
+                    )
+                },
+                status=400,
             )
 
         document = selection.document

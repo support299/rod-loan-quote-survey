@@ -926,6 +926,7 @@ def _opportunity_card_form_context(
     pipeline_name='',
     stage_name='',
     show_processing_btn=False,
+    form_audience='public',
 ):
     linked_contact = linked_contact or {}
     return {
@@ -943,6 +944,7 @@ def _opportunity_card_form_context(
         'pipeline_name': pipeline_name or '',
         'stage_name': stage_name or '',
         'show_processing_btn': show_processing_btn,
+        'form_audience': form_audience,
         'ae_options': OPPORTUNITY_CARD_AE_OPTIONS,
         'total_steps': 4,
     }
@@ -1120,7 +1122,7 @@ def loan_quote_survey_form(request):
     Public Loan Quote Survey (website embed) — no opportunity id in URL.
     URL: /loan-quote-survey/
     POST always creates a NEW GHL opportunity, then redirects to
-    /{opportunity_id}/opportunity-card/ for future edits.
+    /loan-quote-survey/{opportunity_id}/ (client confirmation — not GHL admin card).
     """
     if request.method == 'POST':
         submission, created, request_id, location_id, error = _submit_loan_quote_survey(
@@ -1135,16 +1137,139 @@ def loan_quote_survey_form(request):
                     location_id=location_id,
                     error=error or 'Submission failed. Please try again.',
                     is_public=True,
+                    form_audience='public',
                 ),
             )
-        # Bound URL for edits; flash success via query string
-        url = reverse('opportunity-card-form', kwargs={'request_id': request_id})
+        url = reverse('loan-quote-survey-submission', kwargs={'request_id': request_id})
         return redirect(f'{url}?submitted=1')
 
     return render(
         request,
         'documents/opportunity_card_form.html',
-        _opportunity_card_form_context(is_public=True),
+        _opportunity_card_form_context(is_public=True, form_audience='public'),
+    )
+
+
+def _client_survey_context(request, request_id, **overrides):
+    """
+    Website client confirmation/review after /loan-quote-survey/ submit.
+    No Under Review / pipeline admin controls (those stay on opportunity-card).
+    """
+    from .survey_opportunity import (
+        fetch_opportunity_linked_contact,
+        get_default_ghl_account,
+    )
+
+    account = get_default_ghl_account()
+    linked = fetch_opportunity_linked_contact(request_id, account=account) or {}
+    initial = overrides.pop('initial', None) or {}
+    for key in ('full_name', 'email', 'phone'):
+        if linked.get(key):
+            initial[key] = linked[key]
+
+    forced_mode = overrides.pop('view_mode', None)
+    want_edit = (request.GET.get('edit') == '1') or (forced_mode == 'edit')
+    has_submission = bool(initial) and any(
+        str(initial.get(k) or '').strip()
+        for k in (
+            'entity_name',
+            'subject_property_address',
+            'account_executive',
+            'fico_score',
+            'broker_or_borrower',
+        )
+    )
+
+    if forced_mode == 'edit' or (want_edit and has_submission):
+        view_mode = 'edit'
+    elif has_submission:
+        view_mode = 'review'
+    else:
+        view_mode = 'edit'
+
+    review_sections = []
+    if view_mode == 'review' and initial:
+        review_sections = _opportunity_submission_sections(initial)
+
+    error = overrides.pop('error', '')
+    return _opportunity_card_form_context(
+        request_id=request_id,
+        initial=initial,
+        location_id=overrides.pop(
+            'location_id',
+            extract_location_id(request) or (account.location_id if account else '') or '',
+        ),
+        contact_locked=True,
+        linked_contact=linked,
+        is_public=False,
+        form_audience='client',
+        view_mode=view_mode,
+        review_sections=review_sections,
+        pipeline_name='',
+        stage_name='',
+        show_processing_btn=False,
+        error=error,
+        **overrides,
+    )
+
+
+@csrf_exempt
+def loan_quote_survey_submission(request, request_id):
+    """
+    Client-facing confirmation after website Quick App submit.
+    URL: /loan-quote-survey/{request_id}/
+    Review (single page) + optional ?edit=1. No GHL stage/pipeline admin actions.
+    """
+    if request.method == 'POST':
+        submission, created, opp_id, location_id, error = _submit_loan_quote_survey(
+            request, opportunity_id=request_id
+        )
+        if error or not submission:
+            return render(
+                request,
+                'documents/opportunity_card_form.html',
+                _client_survey_context(
+                    request,
+                    request_id,
+                    initial=_parse_opportunity_card_post(request),
+                    location_id=location_id or extract_location_id(request) or '',
+                    error=error or 'Submission failed. Please try again.',
+                    view_mode='edit',
+                ),
+            )
+        return render(
+            request,
+            'documents/opportunity_card_form.html',
+            _client_survey_context(
+                request,
+                opp_id or request_id,
+                initial=submission.form_data or {},
+                success=True,
+                message='Quick App Submission Form submitted successfully.',
+                location_id=location_id or extract_location_id(request) or '',
+            ),
+        )
+
+    initial = {}
+    try:
+        existing = OpportunityCardSubmission.objects.get(request_id=request_id)
+        initial = existing.form_data or {}
+    except OpportunityCardSubmission.DoesNotExist:
+        pass
+
+    success = request.GET.get('submitted') == '1'
+    message = 'Quick App Submission Form submitted successfully.' if success else ''
+
+    return render(
+        request,
+        'documents/opportunity_card_form.html',
+        _client_survey_context(
+            request,
+            request_id,
+            initial=initial,
+            success=success,
+            message=message,
+        ),
     )
 
 
@@ -1226,6 +1351,7 @@ def _bound_opportunity_card_context(request, request_id, **overrides):
         contact_locked=True,
         linked_contact=linked,
         is_public=False,
+        form_audience='ghl',
         view_mode=view_mode,
         review_sections=review_sections,
         pipeline_name=pipeline_name,

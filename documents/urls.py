@@ -4,6 +4,12 @@ from . import views
 urlpatterns = [
     # Public Loan Quote Survey (website — no opportunity id)
     path('loan-quote-survey/', views.loan_quote_survey_form, name='loan-quote-survey'),
+    # Client confirmation/review after website submit (no GHL admin stage controls)
+    path(
+        'loan-quote-survey/<str:request_id>/',
+        views.loan_quote_survey_submission,
+        name='loan-quote-survey-submission',
+    ),
     # Request-based URLs (with request_id)
     path('<str:request_id>/opportunity-card/', views.opportunity_card_form, name='opportunity-card-form'),
     path(

@@ -429,18 +429,22 @@
                         <h1>Quick App Submission Form</h1>
                         {% if is_public or view_mode == 'edit' %}
                         <p>Step <span id="step-label">1</span> of {{ total_steps|default:4 }} — fields marked <span class="required" style="color:#c62828">*</span> are required</p>
-                        {% elif view_mode == 'under_review_gate' %}
+                        {% elif view_mode == 'under_review_gate' and form_audience == 'ghl' %}
                         <p>Submission received — change status to review the form</p>
+                        {% elif form_audience == 'client' %}
+                        <p>Your Quick App submission{% if success %} was received{% endif %}</p>
                         {% else %}
                         <p>Review submitted details{% if stage_name %} · Stage: {{ stage_name }}{% endif %}</p>
                         {% endif %}
-                        {% if pipeline_name or stage_name %}
+                        {% if form_audience == 'ghl' %}
+                          {% if pipeline_name or stage_name %}
                         <span class="stage-chip">{{ pipeline_name|default:"Pipeline" }}{% if stage_name %} · {{ stage_name }}{% endif %}</span>
+                          {% endif %}
                         {% endif %}
                     </div>
-                    {% if view_mode == 'review' and not is_public %}
+                    {% if view_mode == 'review' and form_audience != 'public' %}
                     <a class="btn-edit" href="?edit=1">Edit</a>
-                    {% elif view_mode == 'edit' and not is_public %}
+                    {% elif view_mode == 'edit' and form_audience != 'public' and request_id %}
                     <a class="btn-edit" href="?">Cancel</a>
                     {% endif %}
                 </div>
@@ -461,7 +465,7 @@
             <div class="success-message" role="alert" style="background:#ffebee;color:#c62828;border-color:#ef9a9a;">{{ error }}</div>
             {% endif %}
 
-            {% if view_mode == 'under_review_gate' and not is_public %}
+            {% if view_mode == 'under_review_gate' and form_audience == 'ghl' %}
             <div class="gate-panel" id="under-review-gate">
                 <div class="gate-card">
                     <h2>Ready to review?</h2>
@@ -472,7 +476,7 @@
             </div>
             {% endif %}
 
-            {% if view_mode == 'review' and not is_public %}
+            {% if view_mode == 'review' and form_audience != 'public' %}
             <div class="review-panel" id="review-panel">
                 {% for section_title, rows in review_sections %}
                 <div class="review-section">
@@ -492,7 +496,7 @@
                 </div>
                 {% endfor %}
 
-                {% if show_processing_btn %}
+                {% if show_processing_btn and form_audience == 'ghl' %}
                 <div class="review-actions">
                     <button type="button" class="btn-stage secondary" id="btn-processing-pipeline">
                         Change this opportunity to 02 Processing pipeline, stage: DOCUMENT UPLOADED
@@ -503,7 +507,7 @@
             </div>
             {% endif %}
 
-            <div class="form-edit-wrap {% if not is_public and view_mode != 'edit' %}hidden-mode{% endif %}" id="form-edit-wrap">
+            <div class="form-edit-wrap {% if form_audience != 'public' and view_mode != 'edit' %}hidden-mode{% endif %}" id="form-edit-wrap">
             <form id="opportunity-form" class="form-body" method="post" action="" novalidate>
                 {% csrf_token %}
                 {% if location_id %}

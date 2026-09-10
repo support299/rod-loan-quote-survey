@@ -1002,7 +1002,7 @@ def _maybe_move_to_termsheet_accepted(request_id, doc_request, account=None):
 
 def _maybe_rollback_to_termsheet_sent(request_id, account=None):
     """
-    If stage is TERMSHEET ACCEPTED/SECURE LINK and a doc is rejected (or no longer
+    If stage is TERMSHEET ACCEPTED/SECURE LINK SENT and a doc is rejected (or no longer
     fully accepted), roll back to TERMSHEET SENT.
     """
     try:
@@ -1371,7 +1371,7 @@ def opportunity_move_processing_document_uploaded(request, request_id):
             return JsonResponse(
                 {
                     "error": (
-                        "Opportunity must be in TERMSHEET ACCEPTED/SECURE LINK before "
+                        "Opportunity must be in TERMSHEET ACCEPTED/SECURE LINK SENT before "
                         "moving to 02 Processing / DOCUMENT UPLOADED "
                         f"(current: {result.get('current_stage') or 'unknown'})."
                     ),
@@ -2423,6 +2423,61 @@ def delete_adhoc_document(request, request_id, selection_id):
         return JsonResponse({'error': 'Request not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def revoke_admin_selection(request, request_id, selection_id):
+    """
+    Cancel / revoke a previously requested document for an opportunity.
+    DELETE /api/{request_id}/admin/selections/{selection_id}/
+    Removes the admin selection (and request-scoped custom Document if any),
+    refreshes the GHL note, and adjusts termsheet stage if needed.
+    """
+    try:
+        doc_request = DocumentRequest.objects.get(request_id=request_id)
+        _link_doc_request_to_location(request, doc_request)
+
+        selection = get_object_or_404(
+            AdminDocumentSelection,
+            id=selection_id,
+            request=doc_request,
+        )
+        if selection.section_type == "needs_list":
+            return JsonResponse(
+                {"error": "Needs List selections are no longer supported."},
+                status=410,
+            )
+
+        document = selection.document
+        doc_name = document.name
+        selection_id_val = selection.id
+        selection.delete()
+
+        # Custom one-off docs exist only for this request — remove the catalog row too
+        if document.request_id == doc_request.id:
+            document.delete()
+
+        _sync_requested_documents_to_ghl(request, doc_request, request_id)
+        _sync_needs_list_upload_status_to_ghl(request, doc_request)
+
+        # Stage: if no longer fully accepted → roll back from ACCEPTED; else promote if complete
+        if _all_requested_documents_accepted(doc_request):
+            _maybe_move_to_termsheet_accepted(request_id, doc_request)
+        else:
+            _maybe_rollback_to_termsheet_sent(request_id)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f'Request for "{doc_name}" cancelled.',
+                "selection_id": selection_id_val,
+            }
+        )
+    except DocumentRequest.DoesNotExist:
+        return JsonResponse({"error": "Request not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @csrf_exempt

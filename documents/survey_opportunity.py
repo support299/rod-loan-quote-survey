@@ -23,7 +23,7 @@ GHL_LOAN_PIPELINE_NAME = "01 Loan Pipeline"
 GHL_QUICK_APP_STAGE_NAME = "quick app submitted"
 GHL_UNDER_REVIEW_STAGE_NAME = "Under Review"
 GHL_TERMSHEET_SENT_STAGE_NAME = "TERMSHEET SENT"
-GHL_TERMSHEET_ACCEPTED_STAGE_NAME = "TERMSHEET ACCEPTED/SECURE LINK"
+GHL_TERMSHEET_ACCEPTED_STAGE_NAME = "TERMSHEET ACCEPTED/SECURE LINK SENT"
 
 # 02 Processing Pipeline
 GHL_PROCESSING_PIPELINE_NAME = "02 Processing Pipeline"
@@ -272,7 +272,7 @@ def move_to_termsheet_sent(opportunity_id, account=None):
 
 def rollback_to_termsheet_sent(opportunity_id, account=None):
     """
-    TERMSHEET ACCEPTED/SECURE LINK → TERMSHEET SENT when an accepted upload
+    TERMSHEET ACCEPTED/SECURE LINK SENT → TERMSHEET SENT when an accepted upload
     is later rejected (or otherwise no longer fully accepted).
     """
     return move_opportunity_to_stage(

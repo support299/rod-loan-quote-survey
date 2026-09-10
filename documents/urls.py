@@ -57,6 +57,11 @@ urlpatterns = [
     path('api/<str:request_id>/admin/needs-list/print-group/create/', views.create_needs_list_print_group, name='create-needs-list-print-group'),
     path('api/<str:request_id>/admin/needs-list/document/create/', views.create_needs_list_document, name='create-needs-list-document'),
     path('api/<str:request_id>/admin/selections/', views.save_admin_selections, name='save-admin-selections'),
+    path(
+        'api/<str:request_id>/admin/selections/<int:selection_id>/',
+        views.revoke_admin_selection,
+        name='revoke-admin-selection',
+    ),
     path('api/<str:request_id>/upload/<int:selection_id>/', views.upload_user_file, name='upload-user-file'),
     path('api/<str:request_id>/upload/<int:upload_id>/delete/', views.delete_user_upload, name='delete-user-upload'),
     path('api/<str:request_id>/admin/upload/<int:upload_id>/accept/', views.accept_user_upload, name='accept-user-upload'),

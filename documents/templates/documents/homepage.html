@@ -242,6 +242,19 @@
         .custom-card p { font-size: 13px; color: var(--muted); margin-top: 3px; }
         .req-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
         .req-side .time { font-size: 11px; color: var(--muted); font-weight: 600; }
+        .btn-revoke {
+            border: 1px solid #fecdd3;
+            background: #fff;
+            color: var(--rose);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 7px 10px;
+            border-radius: 9px;
+            cursor: pointer;
+        }
+        .btn-revoke:hover { background: var(--rose-soft); }
+        .btn-revoke:disabled { opacity: 0.6; cursor: wait; }
     </style>
     <script src="{% static 'documents/ghl_location.js' %}"></script>
 </head>
@@ -388,7 +401,7 @@
                     if (d.accepted_count) chips += '<span class="chip chip-green">' + d.accepted_count + ' accepted</span>';
                     if (d.rejected_count) chips += '<span class="chip chip-rose">' + d.rejected_count + ' rejected</span>';
                     return (
-                        '<div class="req-item">' +
+                        '<div class="req-item" data-selection-id="' + d.selection_id + '">' +
                             '<div class="doc-meta">' +
                                 '<div class="doc-name">' + escapeHtml(d.name) + '</div>' +
                                 (d.description ? '<div class="doc-desc">' + escapeHtml(d.description) + '</div>' : '') +
@@ -396,11 +409,52 @@
                             '</div>' +
                             '<div class="req-side">' +
                                 '<span class="time">' + escapeHtml(formatDate(d.requested_at)) + '</span>' +
+                                '<button type="button" class="btn-revoke" data-selection-id="' + d.selection_id + '" data-name="' + escapeHtml(d.name) + '">Cancel request</button>' +
                             '</div>' +
                         '</div>'
                     );
                 }).join("");
             }
+
+            async function revokeSelection(selectionId, docName, btn) {
+                if (!selectionId) return;
+                var ok = window.confirm(
+                    'Cancel request for "' + (docName || 'this document') + '"?\n\n' +
+                    'The client will no longer see it on the upload page.'
+                );
+                if (!ok) return;
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Cancelling…';
+                }
+                try {
+                    var res = await fetch(withLoc("/api/" + requestId + "/admin/selections/" + selectionId + "/"), {
+                        method: "DELETE"
+                    });
+                    var data = await res.json().catch(function () { return {}; });
+                    if (!res.ok) throw new Error(data.error || "Failed to cancel request");
+                    requestedDocs = (requestedDocs || []).filter(function (d) {
+                        return String(d.selection_id) !== String(selectionId);
+                    });
+                    renderRequested();
+                    if (loanSelect.value) {
+                        await loadDocs(loanSelect.value);
+                    }
+                    showAlert(data.message || "Request cancelled.", true);
+                } catch (err) {
+                    showAlert(err.message || "Failed to cancel request", false);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = "Cancel request";
+                    }
+                }
+            }
+
+            requestedList.addEventListener("click", function (e) {
+                var btn = e.target.closest(".btn-revoke");
+                if (!btn) return;
+                revokeSelection(btn.getAttribute("data-selection-id"), btn.getAttribute("data-name"), btn);
+            });
 
             function selectedIds() {
                 return Array.prototype.map.call(

@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 # Also ensure your IP is in ALLOWED_HOSTS
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37', 'survey.flipfunding.com']

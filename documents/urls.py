@@ -1,7 +1,14 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 
 urlpatterns = [
+    # Root → public Quick App survey
+    path(
+        '',
+        RedirectView.as_view(pattern_name='loan-quote-survey', permanent=False),
+        name='site-root',
+    ),
     # Public Loan Quote Survey (website — no opportunity id)
     path('loan-quote-survey/', views.loan_quote_survey_form, name='loan-quote-survey'),
     # Client confirmation/review after website submit (no GHL admin stage controls)

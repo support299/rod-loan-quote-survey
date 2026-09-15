@@ -174,6 +174,36 @@ GHL_PARENT_ID = config('GHL_PARENT_ID', default='')  # parentId for upload-file
 GHL_ALT_TYPE = config('GHL_ALT_TYPE', default='location')  # for update/delete (e.g. location)
 GHL_ALT_ID = config('GHL_ALT_ID', default='')  # for update/delete (e.g. location/company id)
 
+# App INFO logs (webhook moves, etc.) → gunicorn / journalctl
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "[{levelname}] {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "documents": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "documents.survey_opportunity": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 
 from datetime import timedelta
 

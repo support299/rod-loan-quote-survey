@@ -60,7 +60,8 @@ def resolve_pipeline_stage(account, pipeline_name, stage_name, access_token=None
     location_id = account.location_id
     cache_key = (
         f"ghl_pipe_stage:{location_id}:"
-        f"{_normalize_name(pipeline_name)}:{_normalize_name(stage_name)}"
+        f"{_normalize_name(pipeline_name).replace(' ', '_')}:"
+        f"{_normalize_name(stage_name).replace(' ', '_')}"
     )
     cached = cache.get(cache_key)
     if cached and cached.get("pipeline_id") and cached.get("pipeline_stage_id"):

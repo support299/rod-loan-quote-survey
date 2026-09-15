@@ -18,9 +18,9 @@ urlpatterns = [
         name='opportunity-move-under-review',
     ),
     path(
-        'api/<str:request_id>/opportunity/pipeline/processing-document-uploaded/',
-        views.opportunity_move_processing_document_uploaded,
-        name='opportunity-move-processing-document-uploaded',
+        'api/webhooks/ghl/opportunity/',
+        views.ghl_opportunity_webhook,
+        name='ghl-opportunity-webhook',
     ),
     path('<str:request_id>/opportunity-submission/', views.opportunity_submission_view, name='opportunity-submission-view'),
     path('<str:request_id>/opportunity-submission/pdf/', views.download_opportunity_submission_pdf, name='download-opportunity-submission-pdf'),

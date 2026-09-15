@@ -23,10 +23,13 @@ GHL_LOAN_PIPELINE_NAME = "01 Loan Pipeline"
 GHL_QUICK_APP_STAGE_NAME = "quick app submitted"
 GHL_UNDER_REVIEW_STAGE_NAME = "Under Review"
 GHL_TERMSHEET_SENT_STAGE_NAME = "TERMSHEET SENT"
-GHL_TERMSHEET_ACCEPTED_STAGE_NAME = "TERMSHEET ACCEPTED/SECURE LINK SENT"
+# Renamed in GHL (was TERMSHEET ACCEPTED/SECURE LINK SENT)
+GHL_TERMSHEET_ACCEPTED_STAGE_NAME = "TERM SHEET ACCEPTED/LOAN MOVED TO PROCESSING"
 
 # 02 Processing Pipeline
 GHL_PROCESSING_PIPELINE_NAME = "02 Processing Pipeline"
+GHL_QC_REVIEW_STAGE_NAME = "QC REVIEW"
+# Legacy stage name (no longer used for auto-move)
 GHL_DOCUMENT_UPLOADED_STAGE_NAME = "DOCUMENT UPLOADED"
 
 _PIPELINE_CACHE_TTL = 60 * 60 * 24  # 24 hours
@@ -260,72 +263,108 @@ def move_to_under_review(opportunity_id, account=None):
     )
 
 
-def rollback_to_under_review(opportunity_id, account=None):
+def move_to_processing_qc_review(opportunity_id, account=None):
     """
-    When all document requests are cancelled: TERMSHEET SENT or
-    TERMSHEET ACCEPTED/SECURE LINK SENT → Under Review.
+    01 Loan / TERM SHEET ACCEPTED/LOAN MOVED TO PROCESSING
+    → 02 Processing / QC REVIEW.
+    Triggered by GHL OpportunityStageUpdate webhook (analyst moves stage in GHL).
     """
-    return move_opportunity_to_stage(
-        opportunity_id,
-        GHL_LOAN_PIPELINE_NAME,
-        GHL_UNDER_REVIEW_STAGE_NAME,
-        account=account,
-        only_from_stages=[
-            GHL_TERMSHEET_SENT_STAGE_NAME,
-            GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
-        ],
-    )
-
-
-def move_to_termsheet_sent(opportunity_id, account=None):
-    """
-    Under Review → TERMSHEET SENT (first docs requested), or
-    TERMSHEET ACCEPTED/SECURE LINK SENT → TERMSHEET SENT (new docs after full accept).
-    """
-    return move_opportunity_to_stage(
-        opportunity_id,
-        GHL_LOAN_PIPELINE_NAME,
-        GHL_TERMSHEET_SENT_STAGE_NAME,
-        account=account,
-        only_from_stages=[
-            GHL_UNDER_REVIEW_STAGE_NAME,
-            GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
-        ],
-    )
-
-
-def rollback_to_termsheet_sent(opportunity_id, account=None):
-    """
-    TERMSHEET ACCEPTED/SECURE LINK SENT → TERMSHEET SENT when an accepted upload
-    is later rejected (or otherwise no longer fully accepted).
-    """
-    return move_opportunity_to_stage(
-        opportunity_id,
-        GHL_LOAN_PIPELINE_NAME,
-        GHL_TERMSHEET_SENT_STAGE_NAME,
-        account=account,
-        only_from_stages=[GHL_TERMSHEET_ACCEPTED_STAGE_NAME],
-    )
-
-
-def move_to_termsheet_accepted(opportunity_id, account=None):
-    return move_opportunity_to_stage(
-        opportunity_id,
-        GHL_LOAN_PIPELINE_NAME,
-        GHL_TERMSHEET_ACCEPTED_STAGE_NAME,
-        account=account,
-        only_from_stages=[GHL_TERMSHEET_SENT_STAGE_NAME],
-    )
-
-
-def move_to_processing_document_uploaded(opportunity_id, account=None):
     return move_opportunity_to_stage(
         opportunity_id,
         GHL_PROCESSING_PIPELINE_NAME,
-        GHL_DOCUMENT_UPLOADED_STAGE_NAME,
+        GHL_QC_REVIEW_STAGE_NAME,
         account=account,
         only_from_stages=[GHL_TERMSHEET_ACCEPTED_STAGE_NAME],
     )
+
+
+def maybe_auto_move_term_sheet_accepted_to_qc_review(opportunity_id, account=None):
+    """
+    If opportunity is on TERM SHEET ACCEPTED/LOAN MOVED TO PROCESSING,
+    move it to 02 Processing / QC REVIEW. Safe to call from webhooks.
+    """
+    account = account or get_default_ghl_account()
+    if not account or not opportunity_id:
+        return {"success": False, "skipped": True, "reason": "missing_account_or_id"}
+
+    info = get_opportunity_pipeline_info(opportunity_id, account=account) or {}
+    stage_name = info.get("stage_name") or ""
+    pipeline_name = info.get("pipeline_name") or ""
+
+    if stage_matches(stage_name, GHL_QC_REVIEW_STAGE_NAME) and stage_matches(
+        pipeline_name, GHL_PROCESSING_PIPELINE_NAME
+    ):
+        return {
+            "success": True,
+            "skipped": True,
+            "reason": "already_qc_review",
+            "current_stage": stage_name,
+            "current_pipeline": pipeline_name,
+        }
+
+    if not stage_matches(stage_name, GHL_TERMSHEET_ACCEPTED_STAGE_NAME):
+        return {
+            "success": False,
+            "skipped": True,
+            "reason": "not_term_sheet_accepted",
+            "current_stage": stage_name,
+            "current_pipeline": pipeline_name,
+        }
+
+    return move_to_processing_qc_review(opportunity_id, account=account)
+
+
+def process_ghl_opportunity_webhook(payload):
+    """
+    Handle GHL marketplace webhooks for opportunity stage changes.
+    On TERM SHEET ACCEPTED/LOAN MOVED TO PROCESSING → auto-move to QC REVIEW.
+    """
+    payload = payload or {}
+    event_type = (payload.get("type") or payload.get("event") or "").strip()
+    if event_type not in (
+        "OpportunityStageUpdate",
+        "OpportunityUpdate",
+        "OpportunityStatusUpdate",
+    ):
+        return {"success": True, "skipped": True, "reason": "ignored_event", "type": event_type}
+
+    opportunity_id = (
+        payload.get("id")
+        or payload.get("opportunityId")
+        or (payload.get("opportunity") or {}).get("id")
+    )
+    if not opportunity_id:
+        return {"success": False, "skipped": True, "reason": "missing_opportunity_id"}
+
+    location_id = (
+        payload.get("locationId")
+        or payload.get("location_id")
+        or (payload.get("opportunity") or {}).get("locationId")
+    )
+    account = None
+    if location_id:
+        account = (
+            GHLAuthCredentials.objects.filter(location_id=location_id)
+            .exclude(access_token="")
+            .exclude(access_token__isnull=True)
+            .order_by("-updated_at")
+            .first()
+        )
+    if not account:
+        account = get_default_ghl_account()
+
+    logger.info(
+        "GHL opportunity webhook %s for %s (location=%s)",
+        event_type,
+        opportunity_id,
+        location_id or "",
+    )
+    result = maybe_auto_move_term_sheet_accepted_to_qc_review(
+        opportunity_id, account=account
+    )
+    result["type"] = event_type
+    result["opportunity_id"] = opportunity_id
+    return result
 
 
 def build_opportunity_name(form_data):

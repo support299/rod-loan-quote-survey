@@ -531,15 +531,6 @@
                     <p>No submission data found yet.</p>
                 </div>
                 {% endfor %}
-
-                {% if show_processing_btn and form_audience == 'ghl' %}
-                <div class="review-actions">
-                    <button type="button" class="btn-stage secondary" id="btn-processing-pipeline">
-                        Change this opportunity to 02 Processing pipeline, stage: DOCUMENT UPLOADED
-                    </button>
-                    <div id="processing-error" style="display:none;margin-top:10px;color:#c62828;font-size:13px;"></div>
-                </div>
-                {% endif %}
             </div>
             {% endif %}
 
@@ -965,29 +956,6 @@
                         errEl.textContent = e.message || 'Failed to change status';
                         errEl.style.display = 'block';
                         btnUnder.disabled = false;
-                    }
-                });
-            }
-
-            var btnProc = document.getElementById('btn-processing-pipeline');
-            if (btnProc) {
-                btnProc.addEventListener('click', async function() {
-                    var errEl = document.getElementById('processing-error');
-                    errEl.style.display = 'none';
-                    btnProc.disabled = true;
-                    try {
-                        var res = await fetch(withLoc('/api/' + requestId + '/opportunity/pipeline/processing-document-uploaded/'), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: '{}'
-                        });
-                        var data = await res.json().catch(function() { return {}; });
-                        if (!res.ok) throw new Error(data.error || 'Failed to change pipeline');
-                        window.location.reload();
-                    } catch (e) {
-                        errEl.textContent = e.message || 'Failed to change pipeline';
-                        errEl.style.display = 'block';
-                        btnProc.disabled = false;
                     }
                 });
             }

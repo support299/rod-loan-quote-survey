@@ -283,11 +283,28 @@ def maybe_auto_move_term_sheet_accepted_to_qc_review(opportunity_id, account=Non
     If opportunity is on TERM SHEET ACCEPTED/LOAN MOVED TO PROCESSING,
     move it to 02 Processing / QC REVIEW. Safe to call from webhooks.
     """
+    import requests
+
     account = account or get_default_ghl_account()
     if not account or not opportunity_id:
         return {"success": False, "skipped": True, "reason": "missing_account_or_id"}
 
-    info = get_opportunity_pipeline_info(opportunity_id, account=account) or {}
+    try:
+        info = get_opportunity_pipeline_info(opportunity_id, account=account) or {}
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else None
+        if status == 404:
+            logger.info(
+                "Skip QC Review move: opportunity %s not found in GHL", opportunity_id
+            )
+            return {
+                "success": False,
+                "skipped": True,
+                "reason": "opportunity_not_found",
+                "opportunity_id": opportunity_id,
+            }
+        raise
+
     stage_name = info.get("stage_name") or ""
     pipeline_name = info.get("pipeline_name") or ""
 

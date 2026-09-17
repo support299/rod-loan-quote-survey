@@ -456,9 +456,109 @@
         .btn-modal-cancel { background: #eef2f6; color: var(--ink); }
         .btn-modal-confirm { background: var(--danger); color: #fff; }
 
+        .title-company-card {
+            margin: 0 18px 18px;
+            padding: 16px;
+            border: 1px solid #dbe4ee;
+            border-radius: 14px;
+            background: #f8fafc;
+        }
+        .program-block .title-company-card { margin-top: 4px; }
+        .panel > .title-company-card { margin: 0 18px 16px; }
+        .panel > .title-company-card:last-child { margin-bottom: 18px; }
+        .title-company-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+        .title-company-head h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+        .title-company-head p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+        .title-company-badge {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: #eef2f6;
+            border-radius: 999px;
+            padding: 5px 9px;
+        }
+        .title-company-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .title-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+        .title-field input {
+            width: 100%;
+            border: 1px solid #d0dae6;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            background: #fff;
+            color: var(--ink);
+        }
+        .title-field input:focus {
+            outline: 2px solid rgba(37, 99, 235, 0.25);
+            border-color: var(--accent);
+        }
+        .title-company-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+        .btn-title-submit {
+            border: 0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            background: var(--ink);
+            color: #fff;
+            cursor: pointer;
+        }
+        .btn-title-submit:disabled {
+            opacity: 0.65;
+            cursor: wait;
+        }
+        .title-company-status {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+        }
+        .title-company-status.is-ok { color: #15803d; }
+        .title-company-status.is-err { color: var(--danger); }
+
         @media (max-width: 640px) {
             .hero, .panel { padding: 18px; }
             .hero-meta { flex-direction: column; align-items: flex-start; }
+            .title-company-grid { grid-template-columns: 1fr; }
+            .title-company-card { margin: 0 12px 14px; }
         }
     </style>
 </head>
@@ -477,17 +577,26 @@
         <div id="alert-container"></div>
 
         {% if has_documents %}
-            {% if loan_program_groups %}
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Contact info for processing</h2>
+                    <span class="count">Optional</span>
+                </div>
+                {% include "documents/includes/processing_contact_form.html" with section_key="title_company" section_title="Title Company Contact Info" section_help="Optional — usually the same title company even if multiple loan plans are submitted." name_value=title_company_name email_value=title_company_email phone_value=title_company_phone name_ph="Title Company Name" email_ph="Title Company Email" phone_ph="Title Company Phone" %}
+                {% include "documents/includes/processing_contact_form.html" with section_key="insurance_agent" section_title="Insurance Agent Contact Info" section_help="Optional — usually the same insurance agent even if multiple loan plans are submitted." name_value=insurance_agent_name email_value=insurance_agent_email phone_value=insurance_agent_phone name_ph="Insurance Agent Name" email_ph="Insurance Agent Email" phone_ph="Insurance Agent Phone" %}
+            </div>
+
+            {% if loan_program_sections %}
             <div class="panel">
                 <div class="panel-head">
                     <h2>Loan programs</h2>
-                    <span class="count">{{ loan_program_groups|length }} program{{ loan_program_groups|length|pluralize }}</span>
+                    <span class="count">{{ loan_program_sections|length }} program{{ loan_program_sections|length|pluralize }}</span>
                 </div>
-                {% for program_name, documents in loan_program_groups.items %}
+                {% for section in loan_program_sections %}
                 <div class="program-block">
-                    <div class="program-label">{{ program_name }}</div>
+                    <div class="program-label">{{ section.name }}</div>
                     <div class="doc-list">
-                        {% for doc in documents %}
+                        {% for doc in section.documents %}
                         <div class="document-card" data-selection-id="{{ doc.selection_id }}">
                             <div class="document-header">
                                 <div class="document-name">{{ doc.document_name }}</div>
@@ -613,6 +722,61 @@
             const container = document.getElementById('alert-container');
             container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
             setTimeout(() => { container.innerHTML = ''; }, 5000);
+        }
+
+        async function submitProcessingContact(btn) {
+            const card = btn.closest('.title-company-card');
+            if (!card) return;
+            const statusEl = card.querySelector('.title-company-status');
+            const section = card.getAttribute('data-section') || '';
+            const name = (card.querySelector('.pc-name')?.value || '').trim();
+            const email = (card.querySelector('.pc-email')?.value || '').trim();
+            const phone = (card.querySelector('.pc-phone')?.value || '').trim();
+
+            statusEl.className = 'title-company-status';
+            statusEl.textContent = '';
+
+            if (!name && !email && !phone) {
+                statusEl.classList.add('is-err');
+                statusEl.textContent = 'Enter at least one field to save.';
+                return;
+            }
+
+            btn.disabled = true;
+            const prevLabel = btn.textContent;
+            btn.textContent = 'Saving…';
+            try {
+                let body = { section: section, name: name, email: email, phone: phone };
+                if (section === 'title_company') {
+                    body.title_company_name = name;
+                    body.title_company_email = email;
+                    body.title_company_phone = phone;
+                } else if (section === 'insurance_agent') {
+                    body.insurance_agent_name = name;
+                    body.insurance_agent_email = email;
+                    body.insurance_agent_phone = phone;
+                }
+                if (typeof withLocationJsonBody === 'function') {
+                    body = withLocationJsonBody(body);
+                }
+                const res = await fetch(withLocationQuery(`/api/${requestId}/processing-contacts/`), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Failed to save contact info');
+                statusEl.classList.add('is-ok');
+                statusEl.textContent = data.message || 'Saved to opportunity.';
+                showAlert(data.message || 'Contact info saved.', 'success');
+            } catch (err) {
+                statusEl.classList.add('is-err');
+                statusEl.textContent = err.message || 'Save failed';
+                showAlert(err.message || 'Failed to save contact info', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = prevLabel;
+            }
         }
 
         function openConfirmModal(options) {

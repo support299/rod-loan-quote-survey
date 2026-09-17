@@ -302,6 +302,145 @@ def sync_opportunity_account_executive_details(
     return summary
 
 
+def sync_opportunity_named_fields(
+    opportunity_id,
+    values_by_field_name,
+    account=None,
+    access_token=None,
+):
+    """
+    Write a dict of {GHL field display name: value} onto an opportunity.
+    Empty values are skipped. Missing GHL fields are reported, not created.
+    """
+    from documents.survey_opportunity import get_default_ghl_account
+
+    account = account or get_default_ghl_account()
+    if not account or not opportunity_id:
+        return {"skipped": True, "reason": "missing_account_or_id"}
+
+    token = access_token or account.access_token
+    pairs = [
+        (name, (value or "").strip())
+        for name, value in (values_by_field_name or {}).items()
+        if (value or "").strip()
+    ]
+    if not pairs:
+        return {"skipped": True, "reason": "empty_payload"}
+
+    custom_fields = []
+    missing = []
+    for field_name, value in pairs:
+        field_id = resolve_opportunity_custom_field_by_name(
+            account, field_name, access_token=token
+        )
+        if not field_id:
+            missing.append(field_name)
+            continue
+        custom_fields.append({"id": field_id, "field_value": value})
+
+    if custom_fields:
+        update_opportunity_custom_fields(
+            opportunity_id, custom_fields, access_token=token
+        )
+
+    summary = {
+        "fields_written": len(custom_fields),
+        "missing_fields": missing,
+        "values": {n: v for n, v in pairs},
+    }
+    logger.info(
+        "Synced opportunity named fields for %s: %s", opportunity_id, summary
+    )
+    return summary
+
+
+def sync_opportunity_title_company_details(
+    opportunity_id,
+    title_company_name="",
+    title_company_email="",
+    title_company_phone="",
+    account=None,
+    access_token=None,
+):
+    """Write Title Company Name / Email / Phone onto the GHL opportunity."""
+    from documents.survey_ghl_fields import (
+        GHL_OPPORTUNITY_TITLE_COMPANY_EMAIL,
+        GHL_OPPORTUNITY_TITLE_COMPANY_NAME,
+        GHL_OPPORTUNITY_TITLE_COMPANY_PHONE,
+    )
+
+    return sync_opportunity_named_fields(
+        opportunity_id,
+        {
+            GHL_OPPORTUNITY_TITLE_COMPANY_NAME: title_company_name,
+            GHL_OPPORTUNITY_TITLE_COMPANY_EMAIL: title_company_email,
+            GHL_OPPORTUNITY_TITLE_COMPANY_PHONE: title_company_phone,
+        },
+        account=account,
+        access_token=access_token,
+    )
+
+
+def sync_opportunity_insurance_agent_details(
+    opportunity_id,
+    insurance_agent_name="",
+    insurance_agent_email="",
+    insurance_agent_phone="",
+    account=None,
+    access_token=None,
+):
+    """Write Insurance Agent Name / Email / Phone onto the GHL opportunity."""
+    from documents.survey_ghl_fields import (
+        GHL_OPPORTUNITY_INSURANCE_AGENT_EMAIL,
+        GHL_OPPORTUNITY_INSURANCE_AGENT_NAME,
+        GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE,
+    )
+
+    return sync_opportunity_named_fields(
+        opportunity_id,
+        {
+            GHL_OPPORTUNITY_INSURANCE_AGENT_NAME: insurance_agent_name,
+            GHL_OPPORTUNITY_INSURANCE_AGENT_EMAIL: insurance_agent_email,
+            GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE: insurance_agent_phone,
+        },
+        account=account,
+        access_token=access_token,
+    )
+
+
+def sync_opportunity_broker_contact_details(
+    opportunity_id,
+    form_data=None,
+    account=None,
+    access_token=None,
+):
+    """
+    When survey applicant is Broker, write Broker Name / Email / Phone
+    onto the GHL opportunity. Skips for Direct Borrower.
+    """
+    from documents.survey_ghl_fields import (
+        GHL_OPPORTUNITY_BROKER_EMAIL,
+        GHL_OPPORTUNITY_BROKER_NAME,
+        GHL_OPPORTUNITY_BROKER_PHONE,
+    )
+
+    form_data = form_data or {}
+    role = (form_data.get("broker_or_borrower") or "").strip()
+    if role != "Broker":
+        return {"skipped": True, "reason": "not_broker"}
+
+    return sync_opportunity_named_fields(
+        opportunity_id,
+        {
+            GHL_OPPORTUNITY_BROKER_NAME: form_data.get("broker_name"),
+            GHL_OPPORTUNITY_BROKER_EMAIL: form_data.get("broker_email"),
+            GHL_OPPORTUNITY_BROKER_PHONE: form_data.get("broker_phone"),
+        },
+        account=account,
+        access_token=access_token,
+    )
+
+
 def ensure_loan_quote_survey_contact_fields(account, access_token=None):
     """
     For each catalog field: reuse existing contact custom field by name, else create.
@@ -456,6 +595,9 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
     ae_result = sync_opportunity_account_executive_details(
         request_id, submission.form_data, account, access_token=token
     )
+    broker_result = sync_opportunity_broker_contact_details(
+        request_id, submission.form_data, account=account, access_token=token
+    )
 
     summary = {
         "request_id": request_id,
@@ -467,6 +609,7 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
         "loan_id_created": loan_id_result.get("created"),
         "loan_id_skipped": loan_id_result.get("skipped"),
         "ae_details": ae_result,
+        "broker_details": broker_result,
     }
     logger.info("Loan Quote Survey GHL sync complete: %s", summary)
     return summary

@@ -1,0 +1,30 @@
+{# Optional contact block — expects: section_key, section_title, section_help, name_value, email_value, phone_value, name_ph, email_ph, phone_ph #}
+<div class="title-company-card" data-section="{{ section_key }}">
+    <div class="title-company-head">
+        <div>
+            <h3>{{ section_title }}</h3>
+            <p>{{ section_help }}</p>
+        </div>
+        <span class="title-company-badge">Optional</span>
+    </div>
+    <div class="title-company-grid">
+        <label class="title-field">
+            <span>{{ name_ph }}</span>
+            <input type="text" class="pc-name" placeholder="{{ name_ph }}" value="{{ name_value|default:'' }}">
+        </label>
+        <label class="title-field">
+            <span>{{ email_ph }}</span>
+            <input type="email" class="pc-email" placeholder="{{ email_ph }}" value="{{ email_value|default:'' }}">
+        </label>
+        <label class="title-field">
+            <span>{{ phone_ph }}</span>
+            <input type="text" class="pc-phone" placeholder="{{ phone_ph }}" value="{{ phone_value|default:'' }}">
+        </label>
+    </div>
+    <div class="title-company-actions">
+        <button type="button" class="btn-title-submit" onclick="submitProcessingContact(this)">
+            Save {{ section_title }}
+        </button>
+        <span class="title-company-status" aria-live="polite"></span>
+    </div>
+</div>

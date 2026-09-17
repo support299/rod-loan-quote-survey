@@ -271,7 +271,8 @@ OPPORTUNITY_CARD_FIELD_NAMES = [
     # Step 1 — Contact Info
     'full_name', 'email', 'phone',
     # Step 2
-    'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
+    'entity_name', 'broker_or_borrower', 'broker_name', 'broker_email', 'broker_phone',
+    'account_executive', 'fico_score',
     # Step 3
     'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     # Step 4
@@ -298,7 +299,8 @@ OPPORTUNITY_CARD_SECTIONS = [
         'full_name', 'email', 'phone',
     ]),
     ("Applicant Info", [
-        'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
+        'entity_name', 'broker_or_borrower', 'broker_name', 'broker_email', 'broker_phone',
+        'account_executive', 'fico_score',
     ]),
     ("Borrower Experience", [
         'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
@@ -322,6 +324,9 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'phone': 'Phone',
     'entity_name': 'Entity Name',
     'broker_or_borrower': 'Are you a Broker or Direct Borrower?',
+    'broker_name': 'Broker Name',
+    'broker_email': 'Broker Email',
+    'broker_phone': 'Broker Phone',
     'account_executive': 'Account Executive',
     'fico_score': 'FICO Score',
     'fix_and_hold_properties': 'Fix-and-Hold properties currently generating income (past 36 months)',
@@ -371,7 +376,8 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
 # Always kept (contact + applicant + experience + loan shell).
 OPPORTUNITY_CARD_ALWAYS_FIELDS = frozenset({
     'full_name', 'email', 'phone',
-    'entity_name', 'broker_or_borrower', 'account_executive', 'fico_score',
+    'entity_name', 'broker_or_borrower',
+    'account_executive', 'fico_score',
     'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     'subject_property_address', 'loan_type', 'sms_consent',
 })
@@ -462,6 +468,9 @@ def _opportunity_card_field_visible(key, form_data):
     """True if field should be kept for this submission (mirrors step-3 form rules)."""
     if key in OPPORTUNITY_CARD_ALWAYS_FIELDS:
         return True
+
+    if key in {"broker_name", "broker_email", "broker_phone"}:
+        return _form_value(form_data, "broker_or_borrower") == "Broker"
 
     loan_type = _form_value(form_data, 'loan_type')
     allowed = OPPORTUNITY_CARD_LOAN_TYPE_FIELDS.get(loan_type, frozenset())
@@ -2015,13 +2024,142 @@ def user_upload_page(request, request_id):
     except DocumentRequest.DoesNotExist:
         return render(request, 'documents/request_not_found.html', {'request_id': request_id, 'is_user_facing': True})
     loan_program_groups, individual_docs, _needs = _build_request_document_data(doc_request)
+    # Prefer list structure for template (supports title/insurance once at page level)
+    loan_program_sections = [
+        {"name": program_name, "documents": documents}
+        for program_name, documents in (loan_program_groups or {}).items()
+    ]
     context = {
         'request_id': request_id,
-        'loan_program_groups': loan_program_groups,
+        'loan_program_sections': loan_program_sections,
         'individual_documents': individual_docs,
-        'has_documents': bool(loan_program_groups) or bool(individual_docs),
+        'has_documents': bool(loan_program_sections) or bool(individual_docs),
+        'title_company_name': doc_request.title_company_name or "",
+        'title_company_email': doc_request.title_company_email or "",
+        'title_company_phone': doc_request.title_company_phone or "",
+        'insurance_agent_name': doc_request.insurance_agent_name or "",
+        'insurance_agent_email': doc_request.insurance_agent_email or "",
+        'insurance_agent_phone': doc_request.insurance_agent_phone or "",
     }
     return render(request, 'documents/user_upload.html', context)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def save_processing_contact_info(request, request_id):
+    """
+    Borrower/broker submits optional Title Company or Insurance Agent contact info.
+    POST /api/{request_id}/processing-contacts/
+    Body JSON: section = title_company | insurance_agent, plus name/email/phone fields.
+    """
+    try:
+        doc_request = DocumentRequest.objects.get(request_id=request_id)
+        data = json.loads(request.body) if request.body else {}
+        _link_doc_request_to_location(request, doc_request, json_body=data)
+
+        section = (data.get("section") or "").strip().lower()
+        if section not in {"title_company", "insurance_agent"}:
+            return JsonResponse(
+                {"error": "section must be 'title_company' or 'insurance_agent'."},
+                status=400,
+            )
+
+        if section == "title_company":
+            name = (data.get("title_company_name") or data.get("name") or "").strip()
+            email = (data.get("title_company_email") or data.get("email") or "").strip()
+            phone = (data.get("title_company_phone") or data.get("phone") or "").strip()
+            label = "Title company"
+        else:
+            name = (data.get("insurance_agent_name") or data.get("name") or "").strip()
+            email = (data.get("insurance_agent_email") or data.get("email") or "").strip()
+            phone = (data.get("insurance_agent_phone") or data.get("phone") or "").strip()
+            label = "Insurance agent"
+
+        if email and ("@" not in email or "." not in email.split("@")[-1]):
+            return JsonResponse(
+                {"error": f"Enter a valid {label.lower()} email, or leave it blank."},
+                status=400,
+            )
+        if not name and not email and not phone:
+            return JsonResponse(
+                {"error": "Enter at least one field before submitting."},
+                status=400,
+            )
+
+        update_fields = ["updated_at"]
+        if section == "title_company":
+            doc_request.title_company_name = name
+            doc_request.title_company_email = email
+            doc_request.title_company_phone = phone
+            update_fields.extend(
+                ["title_company_name", "title_company_email", "title_company_phone"]
+            )
+        else:
+            doc_request.insurance_agent_name = name
+            doc_request.insurance_agent_email = email
+            doc_request.insurance_agent_phone = phone
+            update_fields.extend(
+                [
+                    "insurance_agent_name",
+                    "insurance_agent_email",
+                    "insurance_agent_phone",
+                ]
+            )
+        doc_request.save(update_fields=update_fields)
+
+        ghl_result = {"skipped": True, "reason": "no_account"}
+        try:
+            from .survey_opportunity import get_default_ghl_account
+            from .survey_sync import (
+                sync_opportunity_insurance_agent_details,
+                sync_opportunity_title_company_details,
+            )
+
+            account = doc_request.ghl_account if doc_request.ghl_account_id else None
+            account = account or get_default_ghl_account()
+            ghl_kw = _ghl_token_kwargs(request, json_body=data, doc_request=doc_request)
+            token = ghl_kw.get("access_token")
+            if section == "title_company":
+                ghl_result = sync_opportunity_title_company_details(
+                    request_id,
+                    title_company_name=name,
+                    title_company_email=email,
+                    title_company_phone=phone,
+                    account=account,
+                    access_token=token,
+                )
+            else:
+                ghl_result = sync_opportunity_insurance_agent_details(
+                    request_id,
+                    insurance_agent_name=name,
+                    insurance_agent_email=email,
+                    insurance_agent_phone=phone,
+                    account=account,
+                    access_token=token,
+                )
+        except Exception as e:
+            logger.warning(
+                "%s GHL sync failed for %s: %s", label, request_id, e, exc_info=True
+            )
+            ghl_result = {"skipped": True, "reason": "sync_error", "error": str(e)}
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"{label} contact info saved.",
+                "section": section,
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "ghl": ghl_result,
+            }
+        )
+    except DocumentRequest.DoesNotExist:
+        return JsonResponse({"error": "Request not found"}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @csrf_exempt

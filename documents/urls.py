@@ -70,6 +70,16 @@ urlpatterns = [
         name='revoke-admin-selection',
     ),
     path('api/<str:request_id>/upload/<int:selection_id>/', views.upload_user_file, name='upload-user-file'),
+    path(
+        'api/<str:request_id>/processing-contacts/',
+        views.save_processing_contact_info,
+        name='save-processing-contact-info',
+    ),
+    path(
+        'api/<str:request_id>/title-company/',
+        views.save_processing_contact_info,
+        name='save-title-company-contact',
+    ),
     path('api/<str:request_id>/upload/<int:upload_id>/delete/', views.delete_user_upload, name='delete-user-upload'),
     path('api/<str:request_id>/admin/upload/<int:upload_id>/accept/', views.accept_user_upload, name='accept-user-upload'),
     path(

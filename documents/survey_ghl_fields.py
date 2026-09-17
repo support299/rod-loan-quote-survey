@@ -17,6 +17,21 @@ GHL_OPPORTUNITY_LOAN_ID_FIELD_KEY = "opportunity.loan_id"
 GHL_OPPORTUNITY_AE_FIELD_NAME = "Account Executive"
 GHL_OPPORTUNITY_AE_NAME_FIELD_NAME = "Account Executive Name"
 GHL_OPPORTUNITY_AE_EMAIL_FIELD_NAME = "Account Executive Email"
+
+# Opportunity custom fields — Title Company Contact Info tab
+GHL_OPPORTUNITY_TITLE_COMPANY_NAME = "Title Company Name"
+GHL_OPPORTUNITY_TITLE_COMPANY_EMAIL = "Title Company Email"
+GHL_OPPORTUNITY_TITLE_COMPANY_PHONE = "Title Company Phone"
+
+# Opportunity custom fields — Insurance Agent Contact Info tab
+GHL_OPPORTUNITY_INSURANCE_AGENT_NAME = "Insurance Agent Name"
+GHL_OPPORTUNITY_INSURANCE_AGENT_EMAIL = "Insurance Agent Email"
+GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE = "Insurance Agent Phone"
+
+# Opportunity custom fields — Broker Contact Info tab
+GHL_OPPORTUNITY_BROKER_NAME = "Broker Name"
+GHL_OPPORTUNITY_BROKER_EMAIL = "Broker Email"
+GHL_OPPORTUNITY_BROKER_PHONE = "Broker Phone"
 # Phone intentionally omitted — we do not have AE phone numbers.
 
 # Emails for known AEs (case-insensitive name match). Others get name only.

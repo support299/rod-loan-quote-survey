@@ -227,6 +227,45 @@ class DocumentRequest(models.Model):
         null=True,
         help_text="GHL contact note ID for the needs list; when set, we update this note on subsequent changes instead of creating a new one",
     )
+    title_company_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Last submitted Title Company Name (synced to GHL opportunity).",
+    )
+    title_company_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Last submitted Title Company Email (synced to GHL opportunity).",
+    )
+    title_company_phone = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Last submitted Title Company Phone (synced to GHL opportunity).",
+    )
+    title_company_by_scope = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Title company info keyed by upload scope (loan program name or 'individual').",
+    )
+    insurance_agent_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Insurance Agent Name (synced to GHL opportunity).",
+    )
+    insurance_agent_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Insurance Agent Email (synced to GHL opportunity).",
+    )
+    insurance_agent_phone = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Insurance Agent Phone (synced to GHL opportunity).",
+    )
 
     class Meta:
         ordering = ['-created_at']

@@ -695,6 +695,16 @@
                                 </select>
                             </div>
 
+                            <!-- Fix & Flip only — Purchase vs Refinance -->
+                            <div class="field-group field-full conditional-field" id="wrap_fix_flip_loan_type" data-show-when="loan_type" data-show-values="FIX & FLIP">
+                                <label for="fix_flip_loan_type">Fix &amp; Flip Loan Type <span class="required">*</span></label>
+                                <select id="fix_flip_loan_type" name="fix_flip_loan_type">
+                                    <option value="">Select</option>
+                                    <option value="Purchase">Purchase</option>
+                                    <option value="Refinance">Refinance</option>
+                                </select>
+                            </div>
+
                             <!-- DSCR only -->
                             <div class="field-group field-full conditional-field" id="wrap_dscr_loan_type" data-show-when="loan_type" data-show-values="DSCR">
                                 <label for="dscr_loan_type">DSCR Loan Type <span class="required">*</span></label>
@@ -773,13 +783,9 @@
                                 <input type="text" id="purchase_price_original_if_refi" name="purchase_price_original_if_refi" placeholder="$">
                             </div>
 
-                            <!-- Bridge Refi-Rehab: Original Purchase Price -->
-                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_price" data-show-when="bridge_loan_type" data-show-values="Refi-Rehab">
-                                <label for="original_purchase_price">Original Purchase Price <span class="required">*</span></label>
-                                <input type="text" id="original_purchase_price" name="original_purchase_price" placeholder="$">
-                            </div>
-                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|bridge_loan_type:Refi-Rehab">
-                                <label for="original_purchase_date">Original Purchase Date <span class="required">*</span></label>
+                            <!-- Purchase Date: DSCR Refinance + Fix & Flip Refinance -->
+                            <div class="field-group field-full conditional-field" id="wrap_original_purchase_date" data-show-any="dscr_loan_type:DSCR Refinance|fix_flip_loan_type:Refinance">
+                                <label for="original_purchase_date">Purchase Date <span class="required">*</span></label>
                                 <input type="date" id="original_purchase_date" name="original_purchase_date">
                             </div>
                             <!-- Bridge Refi Bridge only: acquisition fields -->
@@ -800,25 +806,25 @@
                                     <label class="radio-option"><input type="radio" name="lot_owned" value="No"> No</label>
                                 </div>
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_purchase_price" data-show-any="loan_type:FIX & FLIP,GROUND-UP CONSTRUCTION|bridge_loan_type:Purchase Bridge">
+                            <div class="field-group field-full conditional-field" id="wrap_purchase_price" data-show-any="fix_flip_loan_type:Purchase,Refinance|loan_type:GROUND-UP CONSTRUCTION|bridge_loan_type:Purchase Bridge">
                                 <label for="purchase_price">Purchase Price <span class="required">*</span></label>
                                 <input type="text" id="purchase_price" name="purchase_price" placeholder="$">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_rehab_budget" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
+                            <div class="field-group field-full conditional-field" id="wrap_rehab_budget" data-show-when="fix_flip_loan_type" data-show-values="Purchase,Refinance">
                                 <label for="rehab_budget">Rehab Budget <span class="required">*</span></label>
                                 <input type="text" id="rehab_budget" name="rehab_budget" placeholder="$">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_arv" data-show-any="loan_type:FIX & FLIP|bridge_loan_type:Refi-Rehab">
+                            <div class="field-group field-full conditional-field" id="wrap_arv" data-show-when="fix_flip_loan_type" data-show-values="Purchase,Refinance">
                                 <label for="arv">ARV (After Repair Value) <span class="required">*</span></label>
                                 <input type="text" id="arv" name="arv" placeholder="$">
                             </div>
-                            <div class="field-group field-full conditional-field" id="wrap_exit_strategy" data-show-when="loan_type" data-show-values="FIX & FLIP">
+                            <div class="field-group field-full conditional-field" id="wrap_exit_strategy" data-show-when="fix_flip_loan_type" data-show-values="Purchase,Refinance">
                                 <label for="exit_strategy">Exit Strategy <span class="required">*</span></label>
                                 <input type="text" id="exit_strategy" name="exit_strategy">
                             </div>
 
-                            <!-- GROUND-UP CONSTRUCTION (continued) -->
-                            <div class="field-group field-full conditional-field" id="wrap_as_is_value" data-show-when="loan_type" data-show-values="GROUND-UP CONSTRUCTION">
+                            <!-- As-Is Value: Ground-Up + Fix & Flip Refinance -->
+                            <div class="field-group field-full conditional-field" id="wrap_as_is_value" data-show-any="loan_type:GROUND-UP CONSTRUCTION|fix_flip_loan_type:Refinance">
                                 <label for="as_is_value">As-Is Value <span class="required">*</span></label>
                                 <input type="text" id="as_is_value" name="as_is_value" placeholder="$">
                             </div>

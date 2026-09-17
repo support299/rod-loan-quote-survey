@@ -276,7 +276,7 @@ OPPORTUNITY_CARD_FIELD_NAMES = [
     # Step 3
     'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     # Step 4
-    'subject_property_address', 'loan_type', 'dscr_loan_type', 'property_type',
+    'subject_property_address', 'loan_type', 'fix_flip_loan_type', 'dscr_loan_type', 'property_type',
     'units_residential', 'units_commercial', 'number_of_units', 'total_number_of_units',
     'residential_sqft_51_percent', 'commercial_property_type', 'please_specify', 'lot_owned',
     'payoff', 'bridge_loan_type', 'purchase_price_original_if_refi', 'original_purchase_price',
@@ -306,7 +306,7 @@ OPPORTUNITY_CARD_SECTIONS = [
         'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     ]),
     ("Loan Info", [
-        'subject_property_address', 'loan_type', 'dscr_loan_type', 'property_type',
+        'subject_property_address', 'loan_type', 'fix_flip_loan_type', 'dscr_loan_type', 'property_type',
         'units_residential', 'units_commercial', 'number_of_units', 'total_number_of_units',
         'residential_sqft_51_percent', 'commercial_property_type', 'please_specify', 'lot_owned',
         'payoff', 'bridge_loan_type', 'purchase_price_original_if_refi', 'original_purchase_price',
@@ -334,6 +334,7 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'residential_ground_up_projects': 'Residential Ground-up projects sold (past 36 months)',
     'subject_property_address': 'Subject Property Address',
     'loan_type': 'Loan Type',
+    'fix_flip_loan_type': 'Fix & Flip Loan Type',
     'dscr_loan_type': 'DSCR Loan Type',
     'property_type': 'Property Type',
     'units_residential': 'How many units are Residential?',
@@ -348,7 +349,7 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'bridge_loan_type': 'Bridge Loan Type',
     'purchase_price_original_if_refi': 'Purchase Price (Original Purchase Price if Refi)',
     'original_purchase_price': 'Original Purchase Price',
-    'original_purchase_date': 'Original Purchase Date',
+    'original_purchase_date': 'Purchase Date',
     'purchase_price': 'Purchase Price',
     'rehab_budget': 'Rehab Budget',
     'original_acquisition_cost': 'Original Acquisition Cost',
@@ -385,9 +386,11 @@ OPPORTUNITY_CARD_ALWAYS_FIELDS = frozenset({
 # Step 3 fields allowed per Loan Type (nested rules applied separately).
 OPPORTUNITY_CARD_LOAN_TYPE_FIELDS = {
     'FIX & FLIP': frozenset({
+        'fix_flip_loan_type',
         'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
         'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
-        'purchase_price', 'rehab_budget', 'arv', 'exit_strategy',
+        'original_purchase_date', 'purchase_price', 'rehab_budget', 'arv', 'exit_strategy',
+        'as_is_value',
     }),
     'DSCR': frozenset({
         'dscr_loan_type', 'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
@@ -399,9 +402,8 @@ OPPORTUNITY_CARD_LOAN_TYPE_FIELDS = {
     'BRIDGE': frozenset({
         'property_type', 'number_of_units', 'commercial_property_type', 'please_specify',
         'units_residential', 'units_commercial', 'total_number_of_units', 'residential_sqft_51_percent',
-        'bridge_loan_type', 'original_purchase_price', 'original_purchase_date',
+        'bridge_loan_type',
         'original_acquisition_cost', 'original_acquisition_date', 'purchase_price',
-        'rehab_budget', 'arv',
         'current_property_value', 'intended_exit', 'existing_loan_balance',
     }),
     'GROUND-UP CONSTRUCTION': frozenset({
@@ -412,9 +414,8 @@ OPPORTUNITY_CARD_LOAN_TYPE_FIELDS = {
     }),
 }
 
-# Original Purchase Date: DSCR Refinance / Bridge Refi Bridge / Refi-Rehab / Purchase Bridge
+# Purchase Date: DSCR Refinance / Fix & Flip Refinance
 # Refi Bridge only: Original Acquisition Cost + Date
-# Refi-Rehab only: Original Purchase Price + Rehab Budget + ARV
 OPPORTUNITY_CARD_REFI_DATE_FIELDS = frozenset({
     'original_purchase_date',
 })
@@ -422,14 +423,10 @@ OPPORTUNITY_CARD_BRIDGE_REFI_BRIDGE_FIELDS = frozenset({
     'original_acquisition_cost',
     'original_acquisition_date',
 })
-OPPORTUNITY_CARD_BRIDGE_REFI_REHAB_FIELDS = frozenset({
-    'original_purchase_price',
-    'rehab_budget',
-    'arv',
-})
 OPPORTUNITY_CARD_REFI_TRIGGERS = {
     'dscr_loan_type': frozenset({'DSCR Refinance'}),
-    'bridge_loan_type': frozenset({'Refi Bridge', 'Refi-Rehab'}),
+    'fix_flip_loan_type': frozenset({'Refinance'}),
+    'bridge_loan_type': frozenset({'Refi Bridge'}),
 }
 
 
@@ -440,13 +437,29 @@ def _form_value(form_data, key):
     return str(parent or '').strip()
 
 
+def _is_fix_flip_purchase_submission(form_data):
+    return (
+        _form_value(form_data, 'loan_type') == 'FIX & FLIP'
+        and _form_value(form_data, 'fix_flip_loan_type') == 'Purchase'
+    )
+
+
+def _is_fix_flip_refinance_submission(form_data):
+    return (
+        _form_value(form_data, 'loan_type') == 'FIX & FLIP'
+        and _form_value(form_data, 'fix_flip_loan_type') == 'Refinance'
+    )
+
+
 def _is_refinance_submission(form_data):
     """True when the active loan path is a refinance subtype."""
     loan_type = _form_value(form_data, 'loan_type')
     if loan_type == 'DSCR':
         return _form_value(form_data, 'dscr_loan_type') == 'DSCR Refinance'
+    if loan_type == 'FIX & FLIP':
+        return _form_value(form_data, 'fix_flip_loan_type') == 'Refinance'
     if loan_type == 'BRIDGE':
-        return _form_value(form_data, 'bridge_loan_type') in {'Refi Bridge', 'Refi-Rehab'}
+        return _form_value(form_data, 'bridge_loan_type') == 'Refi Bridge'
     return False
 
 
@@ -454,13 +467,6 @@ def _is_bridge_refi_bridge_submission(form_data):
     return (
         _form_value(form_data, 'loan_type') == 'BRIDGE'
         and _form_value(form_data, 'bridge_loan_type') == 'Refi Bridge'
-    )
-
-
-def _is_bridge_refi_rehab_submission(form_data):
-    return (
-        _form_value(form_data, 'loan_type') == 'BRIDGE'
-        and _form_value(form_data, 'bridge_loan_type') == 'Refi-Rehab'
     )
 
 
@@ -479,7 +485,10 @@ def _opportunity_card_field_visible(key, form_data):
 
     property_type = _form_value(form_data, 'property_type')
     bridge_type = _form_value(form_data, 'bridge_loan_type')
+    fix_flip_type = _form_value(form_data, 'fix_flip_loan_type')
 
+    if key == 'fix_flip_loan_type':
+        return loan_type == 'FIX & FLIP'
     if key == 'number_of_units':
         return property_type in {'Multifamily', '2-4 units', '5+ Units'}
     if key in {
@@ -499,20 +508,26 @@ def _opportunity_card_field_visible(key, form_data):
     if key == 'units_leased':
         return _form_value(form_data, 'occupancy') == 'Partially Leased'
     if key == 'purchase_price':
-        return loan_type in {'FIX & FLIP', 'GROUND-UP CONSTRUCTION'} or (
-            loan_type == 'BRIDGE' and bridge_type == 'Purchase Bridge'
+        if loan_type == 'FIX & FLIP':
+            return fix_flip_type in {'Purchase', 'Refinance'}
+        if loan_type == 'GROUND-UP CONSTRUCTION':
+            return True
+        return loan_type == 'BRIDGE' and bridge_type == 'Purchase Bridge'
+    if key in {'rehab_budget', 'arv', 'exit_strategy'}:
+        return fix_flip_type in {'Purchase', 'Refinance'}
+    if key == 'as_is_value':
+        return loan_type == 'GROUND-UP CONSTRUCTION' or _is_fix_flip_refinance_submission(
+            form_data
         )
-    if key == 'rehab_budget' or key == 'arv':
-        return loan_type == 'FIX & FLIP' or _is_bridge_refi_rehab_submission(form_data)
     if key == 'original_purchase_price':
-        return _is_bridge_refi_rehab_submission(form_data)
+        return False
     if key in OPPORTUNITY_CARD_BRIDGE_REFI_BRIDGE_FIELDS:
         return _is_bridge_refi_bridge_submission(form_data)
     if key in OPPORTUNITY_CARD_REFI_DATE_FIELDS:
         if loan_type == 'DSCR':
             return _form_value(form_data, 'dscr_loan_type') == 'DSCR Refinance'
-        if loan_type == 'BRIDGE':
-            return bridge_type == 'Refi-Rehab'
+        if loan_type == 'FIX & FLIP':
+            return fix_flip_type == 'Refinance'
         return False
     return True
 

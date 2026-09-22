@@ -111,6 +111,72 @@
         .item p { font-size: 12px; color: var(--muted); }
         .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
         .btn-edit { color: var(--primary); border-color: #90caf9; }
+        .doc-filter-bar {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding: 14px 16px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .doc-filter-bar label {
+            margin-bottom: 0;
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-card {
+            width: 100%;
+            max-width: 460px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+            animation: modal-in .18s ease;
+        }
+        @keyframes modal-in {
+            from { opacity: 0; transform: translateY(8px) scale(.98); }
+            to { opacity: 1; transform: none; }
+        }
+        .modal-card header {
+            padding: 18px 20px 12px;
+            border-bottom: 1px solid #e3f2fd;
+        }
+        .modal-card header h3 {
+            font-size: 18px;
+            color: var(--primary);
+            margin: 0;
+        }
+        .modal-card header p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .modal-card .modal-body {
+            padding: 16px 20px;
+            display: grid;
+            gap: 12px;
+        }
+        .modal-card .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px 20px 18px;
+            border-top: 1px solid #f1f5f9;
+        }
         .tag {
             display: inline-block;
             font-size: 11px;
@@ -169,8 +235,8 @@
         }
     </style>
     <script src="{% static 'documents/ghl_location.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}">
-    <script src="{% static 'documents/modern-select.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}?v=2">
+    <script src="{% static 'documents/modern-select.js' %}?v=2"></script>
 </head>
 <body>
     <div class="wrap">
@@ -246,8 +312,39 @@
                         <button type="submit" class="btn btn-primary">Add Document</button>
                     </div>
                 </form>
+                <div class="doc-filter-bar" id="doc-filter-bar">
+                    <label for="doc-filter-category">Filter by loan program</label>
+                    <select id="doc-filter-category">
+                        <option value="">All loan programs</option>
+                    </select>
+                </div>
                 <div class="list" id="list-documents"></div>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="edit-modal" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+            <header>
+                <h3 id="edit-modal-title">Edit</h3>
+                <p id="edit-modal-subtitle">Update the display name.</p>
+            </header>
+            <form id="edit-modal-form" class="modal-body">
+                <input type="hidden" id="edit-kind" value="">
+                <input type="hidden" id="edit-id" value="">
+                <div>
+                    <label for="edit-name">Name *</label>
+                    <input id="edit-name" name="name" required maxlength="300" autocomplete="off">
+                </div>
+                <div>
+                    <label for="edit-desc">Description</label>
+                    <input id="edit-desc" name="description" maxlength="500" autocomplete="off" placeholder="Optional">
+                </div>
+                <div class="modal-actions" style="padding:0;border:0;">
+                    <button type="button" class="btn" id="edit-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="edit-save">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -255,6 +352,12 @@
     (function () {
         var requestId = "{{ request_id|escapejs }}";
         var locationId = "{{ location_id|escapejs }}" || (typeof getGhlLocationId === 'function' ? getGhlLocationId() : '');
+        var editModal = document.getElementById('edit-modal');
+        var editForm = document.getElementById('edit-modal-form');
+        var editName = document.getElementById('edit-name');
+        var editDesc = document.getElementById('edit-desc');
+        var editKind = document.getElementById('edit-kind');
+        var editId = document.getElementById('edit-id');
 
         function showAlert(msg, ok) {
             var el = document.getElementById('alert');
@@ -277,6 +380,78 @@
             return data;
         }
 
+        function refreshSelects() {
+            if (!window.ModernSelect) return;
+            ['doc-category', 'doc-mode', 'doc-filter-category'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) ModernSelect.refresh(el);
+            });
+        }
+
+        function openEditModal(opts) {
+            editKind.value = opts.kind;
+            editId.value = opts.id;
+            editName.value = opts.name || '';
+            editDesc.value = opts.description || '';
+            document.getElementById('edit-modal-title').textContent = opts.title || 'Edit';
+            document.getElementById('edit-modal-subtitle').textContent = opts.subtitle || 'Update the display name.';
+            editModal.classList.add('open');
+            editModal.setAttribute('aria-hidden', 'false');
+            setTimeout(function () { editName.focus(); editName.select(); }, 0);
+        }
+
+        function closeEditModal() {
+            editModal.classList.remove('open');
+            editModal.setAttribute('aria-hidden', 'true');
+            editForm.reset();
+            editKind.value = '';
+            editId.value = '';
+        }
+
+        document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+        editModal.addEventListener('click', function (e) {
+            if (e.target === editModal) closeEditModal();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && editModal.classList.contains('open')) closeEditModal();
+        });
+
+        editForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var kind = editKind.value;
+            var id = editId.value;
+            var name = editName.value.trim();
+            var description = editDesc.value.trim();
+            if (!name) { showAlert('Name cannot be empty', false); return; }
+            var saveBtn = document.getElementById('edit-save');
+            saveBtn.disabled = true;
+            try {
+                if (kind === 'category') {
+                    await api('/api/categories/' + id + '/', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(jsonBody({ name: name, description: description }))
+                    });
+                    showAlert('Loan program updated', true);
+                    closeEditModal();
+                    await refreshAll();
+                } else if (kind === 'document') {
+                    await api('/api/documents/' + id + '/', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(jsonBody({ name: name, description: description }))
+                    });
+                    showAlert('Document updated', true);
+                    closeEditModal();
+                    await loadDocuments();
+                }
+            } catch (err) {
+                showAlert(err.message, false);
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+
         document.querySelectorAll('.tab').forEach(function (tab) {
             tab.addEventListener('click', function () {
                 document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
@@ -296,6 +471,7 @@
                 btn.classList.toggle('open', open);
                 var label = btn.getAttribute('data-label') || 'Add';
                 btn.textContent = open ? 'Hide Form' : label;
+                if (open) refreshSelects();
             });
         });
 
@@ -315,8 +491,11 @@
             var data = await api('/api/categories/?include_empty=1');
             var list = document.getElementById('list-categories');
             var sel = document.getElementById('doc-category');
+            var filterSel = document.getElementById('doc-filter-category');
+            var prevFilter = filterSel.value || '';
             list.innerHTML = '';
             sel.innerHTML = '<option value="">Select</option>';
+            filterSel.innerHTML = '<option value="">All loan programs</option>';
             (data.categories || []).forEach(function (c) {
                 var item = document.createElement('div');
                 item.className = 'item';
@@ -336,33 +515,28 @@
                 opt.value = c.id;
                 opt.textContent = c.name;
                 sel.appendChild(opt);
+                var filterOpt = document.createElement('option');
+                filterOpt.value = c.id;
+                filterOpt.textContent = c.name;
+                filterSel.appendChild(filterOpt);
             });
+            if (prevFilter && Array.prototype.some.call(filterSel.options, function (o) { return o.value === prevFilter; })) {
+                filterSel.value = prevFilter;
+            }
             if (!(data.categories || []).length) {
                 list.innerHTML = '<div class="empty">No loan programs yet. Click Add Loan Program to create one.</div>';
             }
+            refreshSelects();
             list.querySelectorAll('[data-edit-cat]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    var id = btn.getAttribute('data-edit-cat');
-                    var currentName = btn.getAttribute('data-name') || '';
-                    var currentDesc = btn.getAttribute('data-desc') || '';
-                    var name = window.prompt('Loan program name:', currentName);
-                    if (name === null) return;
-                    name = name.trim();
-                    if (!name) { showAlert('Name cannot be empty', false); return; }
-                    var description = window.prompt('Description (optional):', currentDesc);
-                    if (description === null) return;
-                    try {
-                        await api('/api/categories/' + id + '/', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(jsonBody({
-                                name: name,
-                                description: description.trim()
-                            }))
-                        });
-                        showAlert('Loan program updated', true);
-                        await refreshAll();
-                    } catch (e) { showAlert(e.message, false); }
+                btn.addEventListener('click', function () {
+                    openEditModal({
+                        kind: 'category',
+                        id: btn.getAttribute('data-edit-cat'),
+                        name: btn.getAttribute('data-name') || '',
+                        description: btn.getAttribute('data-desc') || '',
+                        title: 'Edit loan program',
+                        subtitle: 'Rename this loan program for the catalog.'
+                    });
                 });
             });
             list.querySelectorAll('[data-del-cat]').forEach(function (btn) {
@@ -389,7 +563,10 @@
                 document.getElementById('list-documents').innerHTML = '<div class="empty">location_id missing in URL.</div>';
                 return;
             }
-            var data = await api('/api/documents/');
+            var filterCat = (document.getElementById('doc-filter-category').value || '').trim();
+            var url = '/api/documents/';
+            if (filterCat) url += '?category_id=' + encodeURIComponent(filterCat);
+            var data = await api(url);
             var list = document.getElementById('list-documents');
             list.innerHTML = '';
             (data.documents || []).forEach(function (d) {
@@ -411,31 +588,20 @@
                 list.appendChild(item);
             });
             if (!(data.documents || []).length) {
-                list.innerHTML = '<div class="empty">No documents yet. Click Add Document to create one.</div>';
+                list.innerHTML = filterCat
+                    ? '<div class="empty">No documents in this loan program.</div>'
+                    : '<div class="empty">No documents yet. Click Add Document to create one.</div>';
             }
             list.querySelectorAll('[data-edit-doc]').forEach(function (btn) {
-                btn.addEventListener('click', async function () {
-                    var id = btn.getAttribute('data-edit-doc');
-                    var currentName = btn.getAttribute('data-name') || '';
-                    var currentDesc = btn.getAttribute('data-desc') || '';
-                    var name = window.prompt('Document name:', currentName);
-                    if (name === null) return;
-                    name = name.trim();
-                    if (!name) { showAlert('Name cannot be empty', false); return; }
-                    var description = window.prompt('Description (optional):', currentDesc);
-                    if (description === null) return;
-                    try {
-                        await api('/api/documents/' + id + '/', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(jsonBody({
-                                name: name,
-                                description: description.trim()
-                            }))
-                        });
-                        showAlert('Document updated', true);
-                        await loadDocuments();
-                    } catch (e) { showAlert(e.message, false); }
+                btn.addEventListener('click', function () {
+                    openEditModal({
+                        kind: 'document',
+                        id: btn.getAttribute('data-edit-doc'),
+                        name: btn.getAttribute('data-name') || '',
+                        description: btn.getAttribute('data-desc') || '',
+                        title: 'Edit document',
+                        subtitle: 'Rename this document in the catalog.'
+                    });
                 });
             });
             list.querySelectorAll('[data-del-doc]').forEach(function (btn) {
@@ -470,6 +636,7 @@
         async function refreshAll() {
             await loadCategories();
             await loadDocuments();
+            refreshSelects();
         }
 
         document.getElementById('doc-mode').addEventListener('change', function () {
@@ -479,6 +646,10 @@
             wrap.style.display = isTpl ? 'block' : 'none';
             input.required = isTpl;
             if (!isTpl) input.value = '';
+        });
+
+        document.getElementById('doc-filter-category').addEventListener('change', function () {
+            loadDocuments().catch(function (e) { showAlert(e.message, false); });
         });
 
         document.getElementById('form-category').addEventListener('submit', async function (e) {
@@ -528,12 +699,14 @@
                 showAlert('Document added', true);
                 closeFormPanel('form-document');
                 await loadDocuments();
+                refreshSelects();
             } catch (err) { showAlert(err.message, false); }
         });
 
         if (!locationId) {
             showAlert('Open this page with ?location_id= your GHL location id', false);
         }
+        if (window.ModernSelect) ModernSelect.initAll();
         refreshAll().catch(function (e) { showAlert(e.message, false); });
     })();
     </script>

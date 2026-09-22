@@ -256,9 +256,9 @@
         .btn-revoke:hover { background: var(--rose-soft); }
         .btn-revoke:disabled { opacity: 0.6; cursor: wait; }
     </style>
-    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}">
+    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}?v=2">
     <script src="{% static 'documents/ghl_location.js' %}"></script>
-    <script src="{% static 'documents/modern-select.js' %}"></script>
+    <script src="{% static 'documents/modern-select.js' %}?v=2"></script>
 </head>
 <body>
     <div class="wrap">
@@ -534,6 +534,7 @@
                     loanSelect.innerHTML = '<option value="">Failed to load loan programs</option>';
                     showAlert("Could not load loan programs.", false);
                 }
+                if (window.ModernSelect) ModernSelect.refresh(loanSelect);
             }
 
             async function loadDocs(categoryId) {

@@ -235,8 +235,6 @@
         }
     </style>
     <script src="{% static 'documents/ghl_location.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}?v=2">
-    <script src="{% static 'documents/modern-select.js' %}?v=2"></script>
 </head>
 <body>
     <div class="wrap">
@@ -380,14 +378,6 @@
             return data;
         }
 
-        function refreshSelects() {
-            if (!window.ModernSelect) return;
-            ['doc-category', 'doc-mode', 'doc-filter-category'].forEach(function (id) {
-                var el = document.getElementById(id);
-                if (el) ModernSelect.refresh(el);
-            });
-        }
-
         function openEditModal(opts) {
             editKind.value = opts.kind;
             editId.value = opts.id;
@@ -471,7 +461,6 @@
                 btn.classList.toggle('open', open);
                 var label = btn.getAttribute('data-label') || 'Add';
                 btn.textContent = open ? 'Hide Form' : label;
-                if (open) refreshSelects();
             });
         });
 
@@ -526,7 +515,6 @@
             if (!(data.categories || []).length) {
                 list.innerHTML = '<div class="empty">No loan programs yet. Click Add Loan Program to create one.</div>';
             }
-            refreshSelects();
             list.querySelectorAll('[data-edit-cat]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     openEditModal({
@@ -636,7 +624,6 @@
         async function refreshAll() {
             await loadCategories();
             await loadDocuments();
-            refreshSelects();
         }
 
         document.getElementById('doc-mode').addEventListener('change', function () {
@@ -699,14 +686,12 @@
                 showAlert('Document added', true);
                 closeFormPanel('form-document');
                 await loadDocuments();
-                refreshSelects();
             } catch (err) { showAlert(err.message, false); }
         });
 
         if (!locationId) {
             showAlert('Open this page with ?location_id= your GHL location id', false);
         }
-        if (window.ModernSelect) ModernSelect.initAll();
         refreshAll().catch(function (e) { showAlert(e.message, false); });
     })();
     </script>

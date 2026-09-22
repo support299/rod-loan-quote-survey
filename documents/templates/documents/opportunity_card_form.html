@@ -1,12 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick App Submission Form</title>
-    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}?v=2">
-    <script src="{% static 'documents/modern-select.js' %}?v=2"></script>
     <style>
         :root {
             --primary: #1565c0;
@@ -1236,11 +1233,6 @@
 
             updateConditionalFields();
             showStep(1);
-            if (window.ModernSelect) {
-                document.querySelectorAll("select").forEach(function (s) {
-                    ModernSelect.refresh(s);
-                });
-            }
         })();
     </script>
 </body>

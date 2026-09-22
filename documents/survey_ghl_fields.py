@@ -41,6 +41,10 @@ ACCOUNT_EXECUTIVE_EMAILS = {
     "thomas": "Thomas@flipfunding.com",
     "larry": "Larry@flipfunding.com",
     "ashley": "Ashley@flipfunding.com",
+    "anna": "anna@flipfunding.com",
+    "marvin": "mlibron74@gmail.com",
+    "howard": "howardstokes@gmail.com",
+    "rod": "rod@flipfunding.com",
 }
 
 

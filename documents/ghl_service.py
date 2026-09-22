@@ -510,3 +510,61 @@ def update_opportunity(
     resp.raise_for_status()
     data = resp.json() if resp.content else {}
     return data.get("opportunity") or data
+
+
+GHL_USERS_BASE = "https://services.leadconnectorhq.com/users"
+
+
+def list_location_users(location_id, access_token=None):
+    """
+    List users for a GHL location.
+    GET /users/?locationId={locationId}
+    :return: list of user dicts (id, email, name, ...)
+    """
+    headers = _auth_headers(access_token)
+    resp = requests.get(
+        GHL_USERS_BASE + "/",
+        headers=headers,
+        params={"locationId": location_id},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json() if resp.content else {}
+    users = data.get("users") or data.get("data") or []
+    return users if isinstance(users, list) else []
+
+
+def add_contact_followers(contact_id, follower_user_ids, access_token=None):
+    """
+    Add GHL users as followers on a contact.
+    POST /contacts/{contactId}/followers
+    :param follower_user_ids: list of GHL user IDs (max 10)
+    :return: API response dict
+    """
+    if not contact_id or not follower_user_ids:
+        return {}
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    url = f"{GHL_CONTACTS_BASE}/{contact_id}/followers"
+    payload = {"followers": list(follower_user_ids)}
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json() if resp.content else {}
+
+
+def add_opportunity_followers(opportunity_id, follower_user_ids, access_token=None):
+    """
+    Add GHL users as followers on an opportunity.
+    POST /opportunities/{id}/followers
+    :param follower_user_ids: list of GHL user IDs (max 10)
+    :return: API response dict
+    """
+    if not opportunity_id or not follower_user_ids:
+        return {}
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    url = f"{GHL_OPPORTUNITIES_BASE}/{opportunity_id}/followers"
+    payload = {"followers": list(follower_user_ids)}
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json() if resp.content else {}

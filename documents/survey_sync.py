@@ -9,9 +9,12 @@ import requests
 
 from accounts.models import GHLAuthCredentials, GHLCustomField
 from documents.ghl_service import (
+    add_contact_followers,
+    add_opportunity_followers,
     create_location_custom_field,
     get_opportunity,
     list_location_custom_fields,
+    list_location_users,
     update_contact_custom_fields,
     update_opportunity_custom_fields,
 )
@@ -299,6 +302,132 @@ def sync_opportunity_account_executive_details(
     logger.info(
         "Synced opportunity AE details for %s: %s", opportunity_id, summary
     )
+    return summary
+
+
+# location_id -> { email_lower: user_id }
+_LOCATION_USER_EMAIL_CACHE = {}
+
+
+def resolve_ghl_user_id_by_email(account, email, access_token=None):
+    """
+    Map an email to a GHL user id for this location (case-insensitive).
+    Caches the location user list in-process.
+    """
+    email_key = (email or "").strip().lower()
+    if not email_key or not account:
+        return None
+
+    location_id = account.location_id
+    cache = _LOCATION_USER_EMAIL_CACHE.get(location_id)
+    if cache is None:
+        token = access_token or account.access_token
+        users = list_location_users(location_id, access_token=token)
+        cache = {}
+        for user in users:
+            user_email = (user.get("email") or "").strip().lower()
+            user_id = user.get("id")
+            if user_email and user_id:
+                cache[user_email] = user_id
+        _LOCATION_USER_EMAIL_CACHE[location_id] = cache
+
+    return cache.get(email_key)
+
+
+def sync_ae_as_followers(
+    contact_id, opportunity_id, form_data, account, access_token=None
+):
+    """
+    Add the survey-selected AE as a follower on both the contact and opportunity.
+    Skips N/A, missing email, or when the email is not a location user.
+    """
+    ae_name = normalize_survey_value(
+        "account_executive", (form_data or {}).get("account_executive")
+    )
+    if not ae_name:
+        return {"skipped": True, "reason": "no_ae"}
+
+    ae_email = account_executive_email(ae_name)
+    if not ae_email:
+        return {"skipped": True, "reason": "no_ae_email", "ae_name": ae_name}
+
+    token = access_token or account.access_token
+    try:
+        user_id = resolve_ghl_user_id_by_email(account, ae_email, access_token=token)
+    except Exception as e:
+        logger.warning(
+            "Failed listing GHL users to resolve AE %s (%s): %s",
+            ae_name,
+            ae_email,
+            e,
+            exc_info=True,
+        )
+        return {
+            "skipped": True,
+            "reason": "user_lookup_failed",
+            "ae_name": ae_name,
+            "ae_email": ae_email,
+            "error": str(e),
+        }
+
+    if not user_id:
+        logger.warning(
+            "No GHL user found for AE %s email %s (location=%s)",
+            ae_name,
+            ae_email,
+            account.location_id,
+        )
+        return {
+            "skipped": True,
+            "reason": "user_not_found",
+            "ae_name": ae_name,
+            "ae_email": ae_email,
+        }
+
+    followers = [user_id]
+    contact_result = None
+    opportunity_result = None
+    errors = []
+
+    if contact_id:
+        try:
+            contact_result = add_contact_followers(
+                contact_id, followers, access_token=token
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed adding AE follower on contact %s: %s",
+                contact_id,
+                e,
+                exc_info=True,
+            )
+            errors.append(f"contact:{e}")
+
+    if opportunity_id:
+        try:
+            opportunity_result = add_opportunity_followers(
+                opportunity_id, followers, access_token=token
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed adding AE follower on opportunity %s: %s",
+                opportunity_id,
+                e,
+                exc_info=True,
+            )
+            errors.append(f"opportunity:{e}")
+
+    summary = {
+        "ae_name": ae_name,
+        "ae_email": ae_email,
+        "user_id": user_id,
+        "contact_id": contact_id,
+        "opportunity_id": opportunity_id,
+        "contact_followers_added": (contact_result or {}).get("followersAdded"),
+        "opportunity_followers_added": (opportunity_result or {}).get("followersAdded"),
+        "errors": errors,
+    }
+    logger.info("Synced AE as follower: %s", summary)
     return summary
 
 
@@ -595,6 +724,13 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
     ae_result = sync_opportunity_account_executive_details(
         request_id, submission.form_data, account, access_token=token
     )
+    follower_result = sync_ae_as_followers(
+        contact_id,
+        request_id,
+        submission.form_data,
+        account,
+        access_token=token,
+    )
     broker_result = sync_opportunity_broker_contact_details(
         request_id, submission.form_data, account=account, access_token=token
     )
@@ -609,6 +745,7 @@ def sync_loan_quote_survey_submission(request_id, location_id=None):
         "loan_id_created": loan_id_result.get("created"),
         "loan_id_skipped": loan_id_result.get("skipped"),
         "ae_details": ae_result,
+        "ae_followers": follower_result,
         "broker_details": broker_result,
     }
     logger.info("Loan Quote Survey GHL sync complete: %s", summary)

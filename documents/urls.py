@@ -44,7 +44,7 @@ urlpatterns = [
     # API endpoints
     path('api/categories/', views.get_categories, name='categories'),
     path('api/categories/create/', views.create_category, name='create-category'),
-    path('api/categories/<int:category_id>/', views.delete_category, name='delete-category'),
+    path('api/categories/<int:category_id>/', views.category_detail, name='category-detail'),
     path('api/account/document-library/', views.account_document_library, name='account-document-library'),
     path('api/account/print-group-library/', views.account_print_group_library, name='account-print-group-library'),
     path('api/account/print-groups/create/', views.create_account_print_group, name='create-account-print-group'),
@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path('api/documents/', views.get_documents, name='documents'),
     path('api/documents/create/', views.create_document, name='create-document'),
+    path('api/documents/<int:document_id>/', views.update_document, name='update-document'),
     path('api/documents/<int:document_id>/upload/', views.upload_document_file, name='upload-document'),
     path('api/print-groups/', views.get_print_groups, name='print-groups'),
     path('api/<str:request_id>/admin/adhoc/create/', views.create_adhoc_document, name='create-adhoc-document'),

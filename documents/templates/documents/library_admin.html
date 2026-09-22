@@ -109,6 +109,8 @@
         }
         .item h4 { font-size: 14px; margin-bottom: 4px; }
         .item p { font-size: 12px; color: var(--muted); }
+        .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+        .btn-edit { color: var(--primary); border-color: #90caf9; }
         .tag {
             display: inline-block;
             font-size: 11px;
@@ -167,6 +169,8 @@
         }
     </style>
     <script src="{% static 'documents/ghl_location.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'documents/modern-select.css' %}">
+    <script src="{% static 'documents/modern-select.js' %}"></script>
 </head>
 <body>
     <div class="wrap">
@@ -319,9 +323,14 @@
                 var docCount = parseInt(c.document_count, 10) || 0;
                 item.innerHTML =
                     '<div><h4>' + escapeHtml(c.name) + '</h4><p>' + escapeHtml(c.description || '') + '</p></div>' +
+                    '<div class="item-actions">' +
+                    '<button type="button" class="btn btn-edit" data-edit-cat="' + c.id +
+                    '" data-name="' + escapeAttr(c.name) +
+                    '" data-desc="' + escapeAttr(c.description || '') + '">Edit</button>' +
                     '<button type="button" class="btn btn-danger" data-del-cat="' + c.id +
-                    '" data-name="' + escapeHtml(c.name) +
-                    '" data-doc-count="' + docCount + '">Delete</button>';
+                    '" data-name="' + escapeAttr(c.name) +
+                    '" data-doc-count="' + docCount + '">Delete</button>' +
+                    '</div>';
                 list.appendChild(item);
                 var opt = document.createElement('option');
                 opt.value = c.id;
@@ -331,6 +340,31 @@
             if (!(data.categories || []).length) {
                 list.innerHTML = '<div class="empty">No loan programs yet. Click Add Loan Program to create one.</div>';
             }
+            list.querySelectorAll('[data-edit-cat]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    var id = btn.getAttribute('data-edit-cat');
+                    var currentName = btn.getAttribute('data-name') || '';
+                    var currentDesc = btn.getAttribute('data-desc') || '';
+                    var name = window.prompt('Loan program name:', currentName);
+                    if (name === null) return;
+                    name = name.trim();
+                    if (!name) { showAlert('Name cannot be empty', false); return; }
+                    var description = window.prompt('Description (optional):', currentDesc);
+                    if (description === null) return;
+                    try {
+                        await api('/api/categories/' + id + '/', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(jsonBody({
+                                name: name,
+                                description: description.trim()
+                            }))
+                        });
+                        showAlert('Loan program updated', true);
+                        await refreshAll();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
             list.querySelectorAll('[data-del-cat]').forEach(function (btn) {
                 btn.addEventListener('click', async function () {
                     var name = btn.getAttribute('data-name') || 'this loan program';
@@ -368,12 +402,42 @@
                     ' <span class="tag">' + mode + '</span>' +
                     (d.template_url ? ' <a class="tag" href="' + escapeHtml(d.template_url) + '" target="_blank" rel="noopener">Blank file</a>' : '') +
                     '</div>' +
-                    '<button type="button" class="btn btn-danger" data-del-doc="' + d.id + '">Delete</button>';
+                    '<div class="item-actions">' +
+                    '<button type="button" class="btn btn-edit" data-edit-doc="' + d.id +
+                    '" data-name="' + escapeAttr(d.name) +
+                    '" data-desc="' + escapeAttr(d.description || '') + '">Edit</button>' +
+                    '<button type="button" class="btn btn-danger" data-del-doc="' + d.id + '">Delete</button>' +
+                    '</div>';
                 list.appendChild(item);
             });
             if (!(data.documents || []).length) {
                 list.innerHTML = '<div class="empty">No documents yet. Click Add Document to create one.</div>';
             }
+            list.querySelectorAll('[data-edit-doc]').forEach(function (btn) {
+                btn.addEventListener('click', async function () {
+                    var id = btn.getAttribute('data-edit-doc');
+                    var currentName = btn.getAttribute('data-name') || '';
+                    var currentDesc = btn.getAttribute('data-desc') || '';
+                    var name = window.prompt('Document name:', currentName);
+                    if (name === null) return;
+                    name = name.trim();
+                    if (!name) { showAlert('Name cannot be empty', false); return; }
+                    var description = window.prompt('Description (optional):', currentDesc);
+                    if (description === null) return;
+                    try {
+                        await api('/api/documents/' + id + '/', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(jsonBody({
+                                name: name,
+                                description: description.trim()
+                            }))
+                        });
+                        showAlert('Document updated', true);
+                        await loadDocuments();
+                    } catch (e) { showAlert(e.message, false); }
+                });
+            });
             list.querySelectorAll('[data-del-doc]').forEach(function (btn) {
                 btn.addEventListener('click', async function () {
                     if (!confirm('Delete this document from the catalog?')) return;
@@ -397,6 +461,10 @@
             return String(s || '').replace(/[&<>"']/g, function (c) {
                 return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
             });
+        }
+
+        function escapeAttr(s) {
+            return escapeHtml(s).replace(/\n/g, ' ');
         }
 
         async function refreshAll() {

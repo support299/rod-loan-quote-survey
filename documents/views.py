@@ -153,12 +153,12 @@ def create_category(request):
 
 
 @csrf_exempt
-@require_http_methods(["DELETE"])
-def delete_category(request, category_id):
+@require_http_methods(["PUT", "PATCH", "DELETE"])
+def category_detail(request, category_id):
     """
-    Delete a catalog (global) category.
+    Update or delete a catalog (global) loan program.
+    PUT/PATCH /api/categories/<category_id>/  body: {name?, description?}
     DELETE /api/categories/<category_id>/
-    Documents in the category are deleted with it (CASCADE).
     """
     try:
         category = Category.objects.get(id=category_id)
@@ -167,16 +167,53 @@ def delete_category(request, category_id):
 
     if category.request_id:
         return JsonResponse(
-            {'error': 'Request-scoped categories cannot be deleted from Catalog Admin'},
+            {'error': 'Request-scoped categories cannot be changed from Catalog Admin'},
             status=400,
         )
 
-    doc_count = category.documents.count()
-    category.delete()
+    if request.method == "DELETE":
+        doc_count = category.documents.count()
+        category.delete()
+        return JsonResponse({
+            'success': True,
+            'deleted': category_id,
+            'documents_deleted': doc_count,
+        })
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = data.get('name')
+    if name is not None:
+        name = (name or '').strip()
+        if not name:
+            return JsonResponse({'error': 'name cannot be empty'}, status=400)
+        if (
+            Category.objects.filter(name=name, request__isnull=True)
+            .exclude(id=category.id)
+            .exists()
+        ):
+            return JsonResponse(
+                {'error': 'Category with this name already exists'},
+                status=400,
+            )
+        category.name = name
+
+    if 'description' in data:
+        category.description = data.get('description') or ''
+
+    category.save()
     return JsonResponse({
         'success': True,
-        'deleted': category_id,
-        'documents_deleted': doc_count,
+        'category': {
+            'id': category.id,
+            'name': category.name,
+            'description': category.description,
+            'document_count': category.documents.count(),
+            'updated_at': category.updated_at.isoformat() if category.updated_at else None,
+        },
     })
 
 
@@ -1983,6 +2020,55 @@ def create_document(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["PUT", "PATCH"])
+def update_document(request, document_id):
+    """
+    Rename / update description of a catalog document.
+    PUT/PATCH /api/documents/<document_id>/
+    Body JSON: {name?, description?}
+    """
+    try:
+        document = Document.objects.select_related("category", "blank_template").get(
+            id=document_id
+        )
+    except Document.DoesNotExist:
+        return JsonResponse({"error": "Document not found"}, status=404)
+
+    if document.request_id:
+        return JsonResponse(
+            {"error": "Request-scoped documents cannot be changed from Catalog Admin"},
+            status=400,
+        )
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    name = data.get("name")
+    if name is not None:
+        name = (name or "").strip()
+        if not name:
+            return JsonResponse({"error": "name cannot be empty"}, status=400)
+        document.name = name
+        # Keep linked blank template display name in sync when renaming templates
+        if document.blank_template_id and document.blank_template:
+            document.blank_template.name = name
+            document.blank_template.save(update_fields=["name", "updated_at"])
+
+    if "description" in data:
+        document.description = data.get("description") or ""
+
+    document.save()
+    return JsonResponse(
+        {
+            "success": True,
+            "document": _serialize_document(document),
+        }
+    )
 
 
 @csrf_exempt

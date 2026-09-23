@@ -625,6 +625,10 @@
                                 <label for="broker_phone">Broker Phone <span class="required">*</span></label>
                                 <input type="tel" id="broker_phone" name="broker_phone" placeholder="Broker phone">
                             </div>
+                            <div class="field-group field-full conditional-field" data-show-when="broker_or_borrower" data-show-values="Broker">
+                                <label for="request_broker_points">Request Broker Points <span class="required">*</span></label>
+                                <input type="text" id="request_broker_points" name="request_broker_points" placeholder="Broker points requested" required>
+                            </div>
                             <div class="field-group field-full">
                                 <label for="account_executive">Account Executive <span class="required">*</span></label>
                                 <select id="account_executive" name="account_executive" required>
@@ -647,8 +651,8 @@
                                 </select>
                             </div>
                             <div class="field-group field-full">
-                                <label for="fico_score">FICO Score <span class="required">*</span></label>
-                                <input type="text" id="fico_score" name="fico_score" placeholder="FICO Score" required>
+                                <label for="fico_score">FICO Score Borrower <span class="required">*</span></label>
+                                <input type="text" id="fico_score" name="fico_score" placeholder="FICO Score Borrower" required>
                             </div>
                         </div>
                     </section>

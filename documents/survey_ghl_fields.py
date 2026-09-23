@@ -32,6 +32,7 @@ GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE = "Insurance Agent Phone"
 GHL_OPPORTUNITY_BROKER_NAME = "Broker Name"
 GHL_OPPORTUNITY_BROKER_EMAIL = "Broker Email"
 GHL_OPPORTUNITY_BROKER_PHONE = "Broker Phone"
+GHL_OPPORTUNITY_REQUEST_BROKER_POINTS = "Request Broker Points"
 # Phone intentionally omitted — we do not have AE phone numbers.
 
 # Emails for known AEs (case-insensitive name match). Others get name only.
@@ -60,7 +61,8 @@ LOAN_QUOTE_SURVEY_GHL_FIELDS = {
     "entity_name": "Entity Name",
     "broker_or_borrower": "Are you a Broker or Direct Borrower?",
     "account_executive": "Account Executive",
-    "fico_score": "FICO Score",
+    "fico_score": "FICO Score Borrower",
+    "request_broker_points": "Request Broker Points",
     "fix_and_hold_properties": "Fix-and-Hold properties currently generating income (past 36 months)",
     "fix_and_flip_properties": "Fix-and-Flip properties sold (past 36 months)",
     "residential_ground_up_projects": "Residential Ground-up projects sold (past 36 months)",

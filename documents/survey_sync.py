@@ -3,7 +3,7 @@ Ensure Loan Quote Survey contact custom fields exist, then write values to GHL.
 Also assign a permanent opportunity Loan ID on first survey submit only.
 """
 import logging
-import uuid
+import secrets
 
 import requests
 
@@ -78,8 +78,8 @@ def _custom_field_raw_value(custom_fields, field_id):
 
 
 def generate_loan_id():
-    """Permanent unique Loan ID string (stable format, not derived from opportunity id)."""
-    return f"LQ-{uuid.uuid4().hex[:12].upper()}"
+    """Permanent Loan ID: FF + six random digits (e.g. FF782291)."""
+    return f"FF{secrets.randbelow(1_000_000):06d}"
 
 
 def resolve_opportunity_loan_id_field(account, access_token=None):
@@ -551,6 +551,7 @@ def sync_opportunity_broker_contact_details(
         GHL_OPPORTUNITY_BROKER_EMAIL,
         GHL_OPPORTUNITY_BROKER_NAME,
         GHL_OPPORTUNITY_BROKER_PHONE,
+        GHL_OPPORTUNITY_REQUEST_BROKER_POINTS,
     )
 
     form_data = form_data or {}
@@ -564,6 +565,9 @@ def sync_opportunity_broker_contact_details(
             GHL_OPPORTUNITY_BROKER_NAME: form_data.get("broker_name"),
             GHL_OPPORTUNITY_BROKER_EMAIL: form_data.get("broker_email"),
             GHL_OPPORTUNITY_BROKER_PHONE: form_data.get("broker_phone"),
+            GHL_OPPORTUNITY_REQUEST_BROKER_POINTS: form_data.get(
+                "request_broker_points"
+            ),
         },
         account=account,
         access_token=access_token,

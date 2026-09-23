@@ -309,7 +309,7 @@ OPPORTUNITY_CARD_FIELD_NAMES = [
     'full_name', 'email', 'phone',
     # Step 2
     'entity_name', 'broker_or_borrower', 'broker_name', 'broker_email', 'broker_phone',
-    'account_executive', 'fico_score',
+    'request_broker_points', 'account_executive', 'fico_score',
     # Step 3
     'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
     # Step 4
@@ -337,7 +337,7 @@ OPPORTUNITY_CARD_SECTIONS = [
     ]),
     ("Applicant Info", [
         'entity_name', 'broker_or_borrower', 'broker_name', 'broker_email', 'broker_phone',
-        'account_executive', 'fico_score',
+        'request_broker_points', 'account_executive', 'fico_score',
     ]),
     ("Borrower Experience", [
         'fix_and_hold_properties', 'fix_and_flip_properties', 'residential_ground_up_projects',
@@ -364,8 +364,9 @@ OPPORTUNITY_CARD_FIELD_LABELS = {
     'broker_name': 'Broker Name',
     'broker_email': 'Broker Email',
     'broker_phone': 'Broker Phone',
+    'request_broker_points': 'Request Broker Points',
     'account_executive': 'Account Executive',
-    'fico_score': 'FICO Score',
+    'fico_score': 'FICO Score Borrower',
     'fix_and_hold_properties': 'Fix-and-Hold properties currently generating income (past 36 months)',
     'fix_and_flip_properties': 'Fix-and-Flip properties sold (past 36 months)',
     'residential_ground_up_projects': 'Residential Ground-up projects sold (past 36 months)',
@@ -512,7 +513,7 @@ def _opportunity_card_field_visible(key, form_data):
     if key in OPPORTUNITY_CARD_ALWAYS_FIELDS:
         return True
 
-    if key in {"broker_name", "broker_email", "broker_phone"}:
+    if key in {"broker_name", "broker_email", "broker_phone", "request_broker_points"}:
         return _form_value(form_data, "broker_or_borrower") == "Broker"
 
     loan_type = _form_value(form_data, 'loan_type')

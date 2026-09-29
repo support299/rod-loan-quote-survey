@@ -31,10 +31,20 @@ DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37', 'survey.flipfunding.com']
 
 # Allow CSRF when form is embedded in iframe on these origins (e.g. GoHighLevel)
+# Portal SPA (Vite local + future subdomain) also listed here for cookie/CSRF-safe POSTs if needed.
 CSRF_TRUSTED_ORIGINS = [
     'https://app.gohighlevel.com',
     'http://app.gohighlevel.com',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
+
+# Portal React SPA (local Vite). Add production portal origin later — not subdomain yet.
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
 
@@ -54,14 +64,20 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_celery_beat',
+    'corsheaders',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'documents.apps.DocumentsConfig',
     'csp',
     'accounts',
+    'portal.apps.PortalConfig',
 ]
 
 MIDDLEWARE = [
     'csp.middleware.CSPMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -70,6 +86,15 @@ MIDDLEWARE = [
     # XFrameOptionsMiddleware removed: we use CSP_FRAME_ANCESTORS for iframe embedding (e.g. GHL).
     # Adding it back with X_FRAME_OPTIONS = "DENY" would block embedding.
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
 
 # django-csp 4.x format (see https://django-csp.readthedocs.io/en/latest/migration-guide.html)
 # Allow inline styles/scripts and external logo so admin homepage and iframe embedding work
@@ -206,6 +231,17 @@ LOGGING = {
 
 
 from datetime import timedelta
+
+# Access short-lived; refresh rotated + blacklisted after use.
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
 
 CELERY_BEAT_SCHEDULE = {
     'make-api-call-every-minute': {

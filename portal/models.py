@@ -32,3 +32,40 @@ class PortalProfile(models.Model):
 
     def __str__(self):
         return f'{self.user.email} ({self.role})'
+
+
+class Loan(models.Model):
+    """
+    Portal copy of a loan (GHL opportunity). Pipeline info is read from GHL once
+    and cached here; status is managed in the portal (not pushed back to GHL).
+    """
+
+    class Status(models.TextChoices):
+        APPLICATION = 'application', 'Application'
+        PROCESSING = 'processing', 'Processing'
+        UNDERWRITING = 'underwriting', 'Underwriting'
+        APPROVAL = 'approval', 'Approval'
+        CLOSING = 'closing', 'Closing'
+        FUNDED = 'funded', 'Funded'
+
+    # Same value as OpportunityCardSubmission.request_id
+    opportunity_id = models.CharField(max_length=255, unique=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.APPLICATION,
+    )
+    stage_name = models.CharField(max_length=255, blank=True, default='')
+    pipeline_name = models.CharField(max_length=255, blank=True, default='')
+    opportunity_name = models.CharField(max_length=255, blank=True, default='')
+    ghl_contact_id = models.CharField(max_length=64, blank=True, default='')
+    # Set once GHL has been read; while null we retry the GHL fetch
+    ghl_synced_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'loans'
+
+    def __str__(self):
+        return f'{self.opportunity_id} ({self.status})'

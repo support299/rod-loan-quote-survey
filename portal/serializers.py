@@ -16,6 +16,7 @@ class PortalProfileSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
     full_name = serializers.SerializerMethodField()
+    is_admin = serializers.SerializerMethodField()
 
     class Meta:
         model = PortalProfile
@@ -25,6 +26,7 @@ class PortalProfileSerializer(serializers.ModelSerializer):
             'last_name',
             'full_name',
             'role',
+            'is_admin',
             'phone',
             'avatar_url',
             'ghl_contact_id',
@@ -34,6 +36,9 @@ class PortalProfileSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj):
         name = f'{obj.user.first_name} {obj.user.last_name}'.strip()
         return name or obj.user.email.split('@')[0]
+
+    def get_is_admin(self, obj):
+        return bool(obj.user.is_staff or obj.user.is_superuser)
 
 
 class RegisterSerializer(serializers.Serializer):

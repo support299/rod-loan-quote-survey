@@ -1,6 +1,9 @@
 from django.urls import path
 
 from .views import (
+    AdminLoansView,
+    AdminLoanStatusView,
+    AdminUsersView,
     LinkContactView,
     LoanDetailView,
     LoanDocumentsView,
@@ -26,4 +29,11 @@ urlpatterns = [
         LoanDocumentsView.as_view(),
         name='portal-loan-documents',
     ),
+    path('admin/loans/', AdminLoansView.as_view(), name='portal-admin-loans'),
+    path(
+        'admin/loans/<str:opportunity_id>/',
+        AdminLoanStatusView.as_view(),
+        name='portal-admin-loan-status',
+    ),
+    path('admin/users/', AdminUsersView.as_view(), name='portal-admin-users'),
 ]

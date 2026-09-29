@@ -9,6 +9,7 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
+from django.utils import timezone
 
 from accounts.models import GHLAuthCredentials
 from documents.ghl_service import lookup_duplicate_contact
@@ -22,7 +23,7 @@ from documents.survey_opportunity import (
     get_opportunity_pipeline_info,
 )
 
-from .models import PortalProfile
+from .models import Loan, PortalProfile
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +113,6 @@ def _money(value) -> str:
     return f'${amount:,.0f}'
 
 
-def _display_status(stage_name: str, pipeline_name: str = '') -> str:
-    key = _portal_stage_key(stage_name, pipeline_name)
-    labels = {s['key']: s['label'] for s in PORTAL_STAGE_DEFS}
-    if stage_name and key == 'application' and stage_name.strip():
-        # Prefer real GHL stage label when still early / unknown mapping
-        if key != _guess_key_from_text(stage_name):
-            return stage_name.strip()
-    return labels.get(key, stage_name or 'Application')
-
-
 def _guess_key_from_text(text: str) -> str:
     t = (text or '').lower()
     if 'fund' in t:
@@ -130,11 +121,11 @@ def _guess_key_from_text(text: str) -> str:
         return 'closing'
     if 'approv' in t or 'termsheet' in t or 'term sheet' in t or 'commitment' in t:
         return 'approval'
-    if 'underwrit' in t:
+    if 'underwrit' in t or 'under review' in t:
         return 'underwriting'
     if 'process' in t or 'qc review' in t or 'document upload' in t:
         return 'processing'
-    if 'quick app' in t or 'under review' in t or 'application' in t:
+    if 'quick app' in t or 'application' in t:
         return 'application'
     return 'application'
 
@@ -151,8 +142,7 @@ def _portal_stage_key(stage_name: str, pipeline_name: str = '') -> str:
     return _guess_key_from_text(combined)
 
 
-def build_loan_stages(stage_name: str, pipeline_name: str = '') -> list[dict]:
-    current = _portal_stage_key(stage_name, pipeline_name)
+def build_loan_stages(current: str) -> list[dict]:
     keys = [s['key'] for s in PORTAL_STAGE_DEFS]
     try:
         current_idx = keys.index(current)
@@ -189,32 +179,42 @@ def _loan_amount_from_form(form_data: dict) -> str:
     return '—'
 
 
-def _health_for_request(request_id: str) -> str:
+def _health_from_selections(selections) -> str:
+    waiting_on_borrower = False
+    needs_attention = False
+    for sel in selections:
+        uploads = list(sel.user_uploads.all())
+        if not uploads:
+            waiting_on_borrower = True
+            continue
+        latest = uploads[0]  # ordering = -uploaded_at
+        if latest.rejection_reason or latest.rejected_at:
+            needs_attention = True
+    if needs_attention:
+        return 'Needs Attention'
+    if waiting_on_borrower:
+        return 'Waiting on You'
+    return 'On Track'
+
+
+def _health_by_request(request_ids: list[str]) -> dict[str, str]:
+    """Deal health for many loans in two queries (selections + their uploads)."""
+    by_request = {}
     try:
-        doc_req = DocumentRequest.objects.filter(request_id=request_id).first()
-        if not doc_req:
-            return 'On Track'
-        selections = AdminDocumentSelection.objects.filter(request=doc_req).prefetch_related(
-            'user_uploads'
+        selections = (
+            AdminDocumentSelection.objects.filter(request__request_id__in=request_ids)
+            .select_related('request')
+            .prefetch_related('user_uploads')
         )
-        waiting_on_borrower = False
-        needs_attention = False
         for sel in selections:
-            uploads = list(sel.user_uploads.all())
-            if not uploads:
-                waiting_on_borrower = True
-                continue
-            latest = uploads[0]  # ordering = -uploaded_at
-            if latest.rejection_reason or latest.rejected_at:
-                needs_attention = True
-        if needs_attention:
-            return 'Needs Attention'
-        if waiting_on_borrower:
-            return 'Waiting on You'
-        return 'On Track'
+            by_request.setdefault(sel.request.request_id, []).append(sel)
     except Exception:
-        logger.exception('health check failed for %s', request_id)
-        return 'On Track'
+        logger.exception('health check failed for %s', request_ids)
+    return {rid: _health_from_selections(by_request.get(rid, [])) for rid in request_ids}
+
+
+def _health_for_request(request_id: str) -> str:
+    return _health_by_request([request_id])[request_id]
 
 
 def _submissions_for_email(email: str):
@@ -227,33 +227,97 @@ def _submissions_for_email(email: str):
     ).order_by('-submitted_at')
 
 
-def serialize_loan_card(submission: OpportunityCardSubmission, pipe_info: dict | None = None) -> dict:
-    form = submission.form_data or {}
-    stage_name = (pipe_info or {}).get('stage_name') or ''
-    pipeline_name = (pipe_info or {}).get('pipeline_name') or ''
-    status = _display_status(stage_name, pipeline_name) if stage_name else 'Application'
-    if not stage_name:
-        status = 'Application'
+def get_or_sync_loan(opportunity_id: str, account=None) -> Loan:
+    """
+    Return the portal Loan row, reading pipeline info from GHL only the first time.
+    A failed GHL read leaves ghl_synced_at empty so the next request retries.
+    """
+    loan, _ = Loan.objects.get_or_create(opportunity_id=opportunity_id)
+    if not loan.ghl_synced_at:
+        _sync_loan_from_ghl(loan, account or get_default_ghl_account())
+    return loan
 
-    address = (form.get('subject_property_address') or '').strip() or (
-        (pipe_info or {}).get('opportunity') or {}
-    ).get('name') or 'Loan application'
+
+def _loans_by_id(request_ids: list[str], account=None) -> dict[str, Loan]:
+    """Bulk version of get_or_sync_loan: one query for existing rows, GHL only for unsynced."""
+    loans = {loan.opportunity_id: loan for loan in Loan.objects.filter(opportunity_id__in=request_ids)}
+    missing = [rid for rid in request_ids if rid not in loans]
+    if missing:
+        Loan.objects.bulk_create([Loan(opportunity_id=rid) for rid in missing], ignore_conflicts=True)
+        loans.update(
+            {loan.opportunity_id: loan for loan in Loan.objects.filter(opportunity_id__in=missing)}
+        )
+
+    unsynced = [loan for loan in loans.values() if not loan.ghl_synced_at]
+    if unsynced:
+        account = account or get_default_ghl_account()
+        for loan in unsynced:
+            _sync_loan_from_ghl(loan, account)
+    return loans
+
+
+def _sync_loan_from_ghl(loan: Loan, account) -> None:
+    if not account:
+        return
+    try:
+        info = get_opportunity_pipeline_info(
+            loan.opportunity_id,
+            account=account,
+            access_token=account.access_token,
+        )
+    except Exception:
+        logger.warning('Could not load GHL pipeline for opportunity %s', loan.opportunity_id, exc_info=True)
+        return
+    if not info:
+        return
+
+    loan.stage_name = info.get('stage_name') or ''
+    loan.pipeline_name = info.get('pipeline_name') or ''
+    loan.opportunity_name = ((info.get('opportunity') or {}).get('name') or '')[:255]
+    loan.ghl_contact_id = info.get('contact_id') or ''
+    if loan.stage_name:
+        loan.status = _portal_stage_key(loan.stage_name, loan.pipeline_name)
+    loan.ghl_synced_at = timezone.now()
+    loan.save()
+
+
+def update_loan_status(opportunity_id: str, status: str) -> Loan:
+    """Set the portal status (DB only — GHL is not updated)."""
+    loan = get_or_sync_loan(opportunity_id)
+    loan.status = status
+    # Borrower dashboard shows stage_name, so keep it in step with the new status
+    loan.stage_name = Loan.Status(status).label
+    loan.save(update_fields=['status', 'stage_name', 'updated_at'])
+    return loan
+
+
+def serialize_loan_card(
+    submission: OpportunityCardSubmission, loan: Loan, health: str | None = None
+) -> dict:
+    form = submission.form_data or {}
+
+    address = (
+        (form.get('subject_property_address') or '').strip()
+        or loan.opportunity_name
+        or 'Loan application'
+    )
 
     return {
         'id': submission.request_id,
         'opportunityId': submission.request_id,
         'address': address,
-        'status': status,
+        'status': loan.get_status_display(),
+        'statusKey': loan.status,
         'loanAmount': _loan_amount_from_form(form),
         'rateLock': '—',
         'nextPaymentDate': '—',
         'totalDue': '—',
         'estimatedEndDate': '—',
-        'health': _health_for_request(submission.request_id),
+        'health': health or _health_for_request(submission.request_id),
         'loanType': (form.get('loan_type') or '').strip() or '—',
         'entityName': (form.get('entity_name') or '').strip() or '',
-        'pipelineName': pipeline_name,
-        'stageName': stage_name,
+        'pipelineName': loan.pipeline_name,
+        'stageName': loan.stage_name,
     }
 
 
@@ -261,31 +325,28 @@ def list_loans_for_profile(profile: PortalProfile) -> list[dict]:
     profile = link_ghl_contact(profile)
     email = (profile.user.email or '').strip().lower()
     submissions = list(_submissions_for_email(email))
-    account = _account_for_profile(profile)
+    ids = [sub.request_id for sub in submissions]
+    loans = _loans_by_id(ids, _account_for_profile(profile))
+    health = _health_by_request(ids)
+    return [
+        serialize_loan_card(sub, loans[sub.request_id], health[sub.request_id])
+        for sub in submissions
+    ]
 
+
+def list_all_loans() -> list[dict]:
+    """Every loan for the admin pipeline, with borrower contact from the form."""
+    submissions = list(OpportunityCardSubmission.objects.order_by('-submitted_at'))
+    ids = [sub.request_id for sub in submissions]
+    loans_by_id = _loans_by_id(ids)
+    health = _health_by_request(ids)
     loans = []
     for sub in submissions:
-        pipe_info = None
-        if account:
-            try:
-                pipe_info = get_opportunity_pipeline_info(
-                    sub.request_id,
-                    account=account,
-                    access_token=account.access_token,
-                )
-            except Exception:
-                logger.warning(
-                    'Could not load GHL pipeline for opportunity %s',
-                    sub.request_id,
-                    exc_info=True,
-                )
-        # If contact is linked, optionally skip opportunities not owned by that contact
-        if profile.ghl_contact_id and pipe_info:
-            contact_id = pipe_info.get('contact_id')
-            if contact_id and contact_id != profile.ghl_contact_id:
-                # Still allow if form email matched (shared/edge cases) — keep it
-                pass
-        loans.append(serialize_loan_card(sub, pipe_info))
+        form = sub.form_data or {}
+        card = serialize_loan_card(sub, loans_by_id[sub.request_id], health[sub.request_id])
+        card['borrowerName'] = (form.get('full_name') or '').strip()
+        card['borrowerEmail'] = (form.get('email') or '').strip()
+        loans.append(card)
     return loans
 
 
@@ -301,22 +362,9 @@ def get_loan_for_profile(profile: PortalProfile, opportunity_id: str) -> dict | 
         # Staff can view any; borrowers only own email
         return None
 
-    account = _account_for_profile(profile)
-    pipe_info = None
-    if account:
-        try:
-            pipe_info = get_opportunity_pipeline_info(
-                opportunity_id,
-                account=account,
-                access_token=account.access_token,
-            )
-        except Exception:
-            logger.warning('pipeline load failed for %s', opportunity_id, exc_info=True)
-
-    card = serialize_loan_card(sub, pipe_info)
+    loan = get_or_sync_loan(opportunity_id, _account_for_profile(profile))
+    card = serialize_loan_card(sub, loan)
     form = sub.form_data or {}
-    stage_name = card.get('stageName') or ''
-    pipeline_name = card.get('pipelineName') or ''
 
     urgent = None
     docs = list_documents_for_opportunity(opportunity_id)
@@ -366,7 +414,7 @@ def get_loan_for_profile(profile: PortalProfile, opportunity_id: str) -> dict | 
             'label': card['status'],
             'badge': 'Action Needed' if card['health'] == 'Waiting on You' else None,
         },
-        'loanStages': build_loan_stages(stage_name, pipeline_name),
+        'loanStages': build_loan_stages(loan.status),
         'urgentAction': urgent,
         'assignedOfficer': assigned,
         'recentActivity': [],
@@ -429,3 +477,36 @@ def list_documents_for_opportunity(opportunity_id: str) -> dict:
         )
 
     return {'documentsNeeded': needed, 'documentsSent': sent}
+
+
+def list_all_users() -> list[dict]:
+    """Every portal/Django user for the admin Users page (3 queries total)."""
+    from collections import Counter
+
+    from django.contrib.auth import get_user_model
+
+    loan_counts = Counter(
+        (email or '').strip().lower()
+        for email in OpportunityCardSubmission.objects.values_list('form_data__email', flat=True)
+    )
+
+    users = []
+    for user in get_user_model().objects.select_related('portal_profile').order_by('-date_joined'):
+        profile = getattr(user, 'portal_profile', None)
+        email = (user.email or '').strip().lower()
+        users.append(
+            {
+                'id': user.id,
+                'email': user.email,
+                'fullName': f'{user.first_name} {user.last_name}'.strip(),
+                'phone': profile.phone if profile else '',
+                'role': profile.role if profile else PortalProfile.Role.BORROWER,
+                'isAdmin': bool(user.is_staff or user.is_superuser),
+                'isActive': user.is_active,
+                'ghlLinked': bool(profile and profile.ghl_contact_id),
+                'loanCount': loan_counts.get(email, 0) if email else 0,
+                'dateJoined': user.date_joined,
+                'lastLogin': user.last_login,
+            }
+        )
+    return users

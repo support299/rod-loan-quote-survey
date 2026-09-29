@@ -6,7 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from . import services as portal_services
-from .models import PortalProfile
+from .models import Loan, PortalProfile
 from .serializers import (
     PortalProfileSerializer,
     PortalTokenObtainPairSerializer,
@@ -14,6 +14,18 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class IsPortalStaff(permissions.BasePermission):
+    """Django staff/superusers or portal profiles with the staff role."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or user.is_superuser:
+            return True
+        return portal_services.get_profile(user).role == PortalProfile.Role.STAFF
 
 
 class RegisterView(generics.CreateAPIView):
@@ -134,3 +146,41 @@ class LoanDocumentsView(APIView):
             return Response({'detail': 'Loan not found.'}, status=status.HTTP_404_NOT_FOUND)
         docs = portal_services.list_documents_for_opportunity(opportunity_id)
         return Response(docs)
+
+
+class AdminLoansView(APIView):
+    permission_classes = [IsPortalStaff]
+
+    def get(self, request):
+        loans = portal_services.list_all_loans()
+        stages = [{'key': value, 'label': label} for value, label in Loan.Status.choices]
+        return Response({'loans': loans, 'count': len(loans), 'stages': stages})
+
+
+class AdminLoanStatusView(APIView):
+    permission_classes = [IsPortalStaff]
+
+    def patch(self, request, opportunity_id):
+        new_status = request.data.get('status')
+        if new_status not in Loan.Status.values:
+            return Response(
+                {'detail': f'status must be one of: {", ".join(Loan.Status.values)}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        loan = portal_services.update_loan_status(opportunity_id, new_status)
+        return Response(
+            {
+                'id': loan.opportunity_id,
+                'status': loan.get_status_display(),
+                'statusKey': loan.status,
+                'stageName': loan.stage_name,
+            }
+        )
+
+
+class AdminUsersView(APIView):
+    permission_classes = [IsPortalStaff]
+
+    def get(self, request):
+        users = portal_services.list_all_users()
+        return Response({'users': users, 'count': len(users)})

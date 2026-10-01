@@ -31,18 +31,20 @@ DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37', 'survey.flipfunding.com']
 
 # Allow CSRF when form is embedded in iframe on these origins (e.g. GoHighLevel)
-# Portal SPA (Vite local + future subdomain) also listed here for cookie/CSRF-safe POSTs if needed.
+# Portal SPA (Vite local + clientportal subdomain) also listed here.
 CSRF_TRUSTED_ORIGINS = [
     'https://app.gohighlevel.com',
     'http://app.gohighlevel.com',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://clientportal.flipfunding.com',
 ]
 
-# Portal React SPA (local Vite). Add production portal origin later — not subdomain yet.
+# Portal React SPA origins (local Vite + production subdomain).
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://clientportal.flipfunding.com',
 ]
 CORS_ALLOW_CREDENTIALS = True
 

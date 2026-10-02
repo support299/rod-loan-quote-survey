@@ -679,6 +679,12 @@ def _resolve_needs_list_opportunity_field_ids(ctx):
     )
 
 
+def _opportunity_note_prefix(opportunity_name):
+    """Contact notes show on every opportunity of that contact in GHL — tag which one."""
+    name = (opportunity_name or "").strip()
+    return f"[{name}] " if name else ""
+
+
 def _sync_requested_documents_to_ghl(request, doc_request, request_id, json_body=None, ghl_ctx=None):
     """
     Push the full requested-document list + upload URL to GHL opportunity fields
@@ -753,10 +759,12 @@ def _sync_requested_documents_to_ghl(request, doc_request, request_id, json_body
         note_body = "\n\n".join(note_parts)
 
         contact_id = None
+        opportunity_name = ""
         try:
             opp_data = get_opportunity(request_id, **ghl_kw)
             opportunity = opp_data.get("opportunity") or {}
             contact_id = opportunity.get("contactId")
+            opportunity_name = (opportunity.get("name") or "").strip()
         except Exception as opp_err:
             logger.warning(
                 "Failed to fetch GHL opportunity for contact sync (request %s): %s",
@@ -765,17 +773,21 @@ def _sync_requested_documents_to_ghl(request, doc_request, request_id, json_body
                 exc_info=True,
             )
 
+        contact_note_body = (
+            f"{_opportunity_note_prefix(opportunity_name)}Needs List:\n{note_body}"
+        )
+
         if contact_id:
             try:
                 if doc_request.ghl_needs_list_note_id:
                     update_contact_note(
                         contact_id,
                         doc_request.ghl_needs_list_note_id,
-                        note_body,
+                        contact_note_body,
                         **ghl_kw,
                     )
                 else:
-                    result = create_contact_note(contact_id, note_body, **ghl_kw)
+                    result = create_contact_note(contact_id, contact_note_body, **ghl_kw)
                     note_id = (result.get("note") or {}).get("id") or result.get("id")
                     if note_id:
                         doc_request.ghl_needs_list_note_id = note_id
@@ -1053,7 +1065,15 @@ def _create_survey_contact_note(request, submission, request_id, contact_id, acc
         view_url = request.build_absolute_uri(
             reverse("opportunity-submission-view", kwargs={"request_id": request_id})
         )
-        note_body = f"Quick App Submission Form - {submitted_date} - {view_url}"
+        from .survey_opportunity import build_opportunity_name
+
+        opportunity_name = build_opportunity_name(submission.form_data)
+        if opportunity_name == "Quick App Submission Form":
+            opportunity_name = ""
+        note_body = (
+            f"{_opportunity_note_prefix(opportunity_name)}"
+            f"Quick App Submission Form - {submitted_date} - {view_url}"
+        )
         result = create_contact_note(contact_id, note_body, **ghl_kw)
         note_id = (result.get("note") or {}).get("id") or result.get("id")
         if note_id:

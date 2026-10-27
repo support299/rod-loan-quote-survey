@@ -31,22 +31,10 @@ DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'unscavenged-uncalumnious-desmond.ngrok-free.dev', '54.219.208.37', 'survey.flipfunding.com']
 
 # Allow CSRF when form is embedded in iframe on these origins (e.g. GoHighLevel)
-# Portal SPA (Vite local + clientportal subdomain) also listed here.
 CSRF_TRUSTED_ORIGINS = [
     'https://app.gohighlevel.com',
     'http://app.gohighlevel.com',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://clientportal.flipfunding.com',
 ]
-
-# Portal React SPA origins (local Vite + production subdomain).
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://clientportal.flipfunding.com',
-]
-CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
 
@@ -66,20 +54,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_celery_beat',
-    'corsheaders',
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
     'documents.apps.DocumentsConfig',
     'csp',
     'accounts',
-    'portal.apps.PortalConfig',
 ]
 
 MIDDLEWARE = [
     'csp.middleware.CSPMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -88,15 +70,6 @@ MIDDLEWARE = [
     # XFrameOptionsMiddleware removed: we use CSP_FRAME_ANCESTORS for iframe embedding (e.g. GHL).
     # Adding it back with X_FRAME_OPTIONS = "DENY" would block embedding.
 ]
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
-}
 
 # django-csp 4.x format (see https://django-csp.readthedocs.io/en/latest/migration-guide.html)
 # Allow inline styles/scripts and external logo so admin homepage and iframe embedding work
@@ -201,6 +174,9 @@ GHL_PARENT_ID = config('GHL_PARENT_ID', default='')  # parentId for upload-file
 GHL_ALT_TYPE = config('GHL_ALT_TYPE', default='location')  # for update/delete (e.g. location)
 GHL_ALT_ID = config('GHL_ALT_ID', default='')  # for update/delete (e.g. location/company id)
 
+# Shared secret for the partner server calling /api/external/... (must match their .env)
+EXTERNAL_API_SECRET_KEY = config('EXTERNAL_API_SECRET_KEY', default='')
+
 # App INFO logs (webhook moves, etc.) → gunicorn / journalctl
 LOGGING = {
     "version": 1,
@@ -233,17 +209,6 @@ LOGGING = {
 
 
 from datetime import timedelta
-
-# Access short-lived; refresh rotated + blacklisted after use.
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-}
 
 CELERY_BEAT_SCHEDULE = {
     'make-api-call-every-minute': {

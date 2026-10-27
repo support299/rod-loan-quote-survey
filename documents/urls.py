@@ -1,6 +1,7 @@
 from django.urls import path
 from django.views.generic import RedirectView
 from . import views
+from . import external_api
 
 urlpatterns = [
     # Root → public Quick App survey
@@ -41,6 +42,13 @@ urlpatterns = [
     path('<str:request_id>/download-pdf/', views.download_request_pdf, name='download-request-pdf'),
     path('<str:request_id>/view/', views.user_documents_view, name='user-documents-view'),
     
+    # Server-to-server API (shared secret in X-API-Key header)
+    path(
+        'api/external/opportunities/<str:opportunity_id>/',
+        external_api.opportunity_details,
+        name='external-opportunity-details',
+    ),
+
     # API endpoints
     path('api/categories/', views.get_categories, name='categories'),
     path('api/categories/create/', views.create_category, name='create-category'),

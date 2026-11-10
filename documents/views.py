@@ -1040,6 +1040,15 @@ def ghl_opportunity_webhook(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+    # CEO dashboard records stage/status/owner history from the same webhook.
+    # Queued so it can never slow down or break the auto-move below.
+    try:
+        from dashboard.tasks import ingest_ghl_webhook
+
+        ingest_ghl_webhook.delay(payload)
+    except Exception:
+        logger.exception("Could not queue dashboard webhook ingest")
+
     try:
         result = process_ghl_opportunity_webhook(payload)
         # Always 200 so GHL does not retry forever on intentional skips

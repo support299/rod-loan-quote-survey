@@ -21,6 +21,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Before documents.urls, whose root-level <request_id>/ patterns would shadow it
+    path('api/dashboard/', include('dashboard.urls')),
     path('', include('documents.urls')),
     path('api/accounts/', include('accounts.urls')),
 ]

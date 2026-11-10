@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
 # from csp.constants import SELF, UNSAFE_INLINE
@@ -57,9 +58,13 @@ INSTALLED_APPS = [
     'documents.apps.DocumentsConfig',
     'csp',
     'accounts',
+    'rest_framework',
+    'corsheaders',
+    'dashboard.apps.DashboardConfig',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'csp.middleware.CSPMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -177,6 +182,35 @@ GHL_ALT_ID = config('GHL_ALT_ID', default='')  # for update/delete (e.g. locatio
 # Shared secret for the partner server calling /api/external/... (must match their .env)
 EXTERNAL_API_SECRET_KEY = config('EXTERNAL_API_SECRET_KEY', default='')
 
+# CEO dashboard API (/api/dashboard/) — consumed by the separately hosted React frontend.
+# Comma-separated origins, e.g. https://dashboard.flipfunding.com
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in config('DASHBOARD_FRONTEND_ORIGINS', default='http://localhost:5173').split(',')
+    if o.strip()
+]
+CORS_URLS_REGEX = r'^/api/dashboard/.*$'  # CORS only for the dashboard API
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),
+    'UNAUTHENTICATED_USER': None,
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'UPDATE_LAST_LOGIN': True,
+}
+
 # App INFO logs (webhook moves, etc.) → gunicorn / journalctl
 LOGGING = {
     "version": 1,
@@ -204,15 +238,34 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        "dashboard": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
 
 
-from datetime import timedelta
+from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
     'make-api-call-every-minute': {
         'task': 'accounts.tasks.make_api_call',
         'schedule': timedelta(hours=10),# every 10 hours
+    },
+    # CEO dashboard: full GHL pull + exception refresh (brief: 15–60 min refresh target)
+    'dashboard-sync': {
+        'task': 'dashboard.tasks.sync_dashboard',
+        'schedule': timedelta(minutes=15),
+    },
+    'dashboard-reminders': {
+        'task': 'dashboard.tasks.send_dashboard_reminders',
+        'schedule': timedelta(minutes=30),
+    },
+    # 04:55 UTC ≈ end of day in New York — one forecast snapshot per day
+    'dashboard-forecast-snapshot': {
+        'task': 'dashboard.tasks.snapshot_forecast',
+        'schedule': crontab(hour=4, minute=55),
     },
 }

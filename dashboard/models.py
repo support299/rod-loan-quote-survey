@@ -154,6 +154,7 @@ class Deal(models.Model):
     termsheet_status = models.CharField(max_length=64, blank=True, default="")
     lost_reason_id = models.CharField(max_length=64, blank=True, default="")
     ghl_loss_reason = models.CharField(max_length=255, blank=True, default="")
+    ghl_loss_notes = models.TextField(blank=True, default="")
 
     total_loan_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     origination_fee = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)

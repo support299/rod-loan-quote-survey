@@ -182,7 +182,8 @@ def days_in_stage(ds, deal):
 
 def loss_reason(deal):
     meta = _meta(deal)
-    return (meta and meta.loss_primary_reason) or deal.ghl_loss_reason or "Unknown"
+    # GHL is the source of truth; dashboard-only values fill in when GHL is empty.
+    return deal.ghl_loss_reason or (meta and meta.loss_primary_reason) or "Unknown"
 
 
 def stage_probability(ds, deal):

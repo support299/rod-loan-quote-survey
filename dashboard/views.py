@@ -283,10 +283,16 @@ class DealMetaView(APIView):
         for f in self.TEXT_FIELDS:
             if f in data:
                 setattr(meta, f, str(data.get(f) or "").strip())
+        # The form is pre-filled from GHL, so a reason that GHL holds (even one added to the
+        # GHL dropdown later) is accepted as-is.
+        allowed = set(LOSS_REASONS)
+        if deal.ghl_loss_reason and len(deal.ghl_loss_reason) <= 128:
+            allowed.add(deal.ghl_loss_reason)
         for f in ("loss_primary_reason", "loss_secondary_reason"):
-            if getattr(meta, f) and getattr(meta, f) not in LOSS_REASONS:
+            if getattr(meta, f) and getattr(meta, f) not in allowed:
                 return Response({"error": f"{f} must be one of the loss reasons"}, status=400)
-        if meta.loss_primary_reason == "Other" and not meta.loss_notes:
+        mirrors_ghl = (meta.loss_primary_reason, meta.loss_notes) == (deal.ghl_loss_reason, deal.ghl_loss_notes)
+        if meta.loss_primary_reason == "Other" and not meta.loss_notes and not mirrors_ghl:
             return Response({"error": "Loss notes are required when the reason is Other"}, status=400)
         if meta.loss_outcome and meta.loss_outcome not in LOSS_OUTCOMES:
             return Response({"error": "invalid loss_outcome"}, status=400)
@@ -342,6 +348,16 @@ def _push_loss_to_ghl(deal, meta):
         if not fields:
             return False
         ghl_client.update_opportunity_fields(deal.ghl_id, fields, access_token=ctx.token)
+        # Mirror what GHL now holds so the page shows it before the next sync.
+        update = {}
+        if reason_id and meta.loss_primary_reason:
+            update["ghl_loss_reason"] = meta.loss_primary_reason[:255]
+        if notes_id and meta.loss_notes:
+            update["ghl_loss_notes"] = meta.loss_notes
+        if update:
+            type(deal).objects.filter(pk=deal.pk).update(**update)
+            for k, v in update.items():
+                setattr(deal, k, v)
         return True
     except Exception:  # noqa: BLE001
         logger.exception("Could not push loss info to GHL for %s", deal.ghl_id)

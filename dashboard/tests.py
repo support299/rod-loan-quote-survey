@@ -12,7 +12,7 @@ from .constants import LOAN_PIPELINE_NAME, PROCESSING_PIPELINE_NAME, STAGE_FLOW
 from .finance import FinanceContext, deal_financials
 from .issues import refresh_issues
 from .metrics import load_dataset, overview, scorecards
-from .models import CompanySettings, DashboardProfile, Deal, DealEvent, DealIssue, DealMilestone, PipelineStage
+from .models import CompanySettings, DashboardProfile, Deal, DealEvent, DealIssue, DealMeta, DealMilestone, PipelineStage
 from .periods import business_days, prior_period, resolve_period
 from .sync import SyncContext, _load_stages, parse_money, upsert_opportunity
 
@@ -328,6 +328,29 @@ class ApiTests(DashboardDataMixin, TestCase):
         self.assertEqual(r.status_code, 400)
         r = self.client.patch("/api/dashboard/deals/r1/meta/", {"loss_primary_reason": "Rate or points", "recoverable": "yes"}, format="json")
         self.assertEqual(r.status_code, 200)
+
+    @mock.patch("dashboard.views._push_loss_to_ghl", return_value=False)
+    def test_loss_fields_follow_ghl(self, _push):
+        from .metrics import loss_reason
+
+        Deal.objects.filter(pk="r1").update(ghl_loss_reason="Other", ghl_loss_notes="")
+        DealMeta.objects.update_or_create(deal_id="r1", defaults={"loss_primary_reason": "Rate or points"})
+        deal = Deal.objects.get(pk="r1")
+        self.assertEqual(loss_reason(deal), "Other")  # GHL wins over the dashboard value
+        self.login("rod@x.com")
+        meta = self.client.get("/api/dashboard/deals/r1/").json()["meta"]
+        self.assertEqual(meta["loss_primary_reason"], "Other")
+        # Saving the pre-filled form (GHL "Other" with no notes) must not block unrelated edits.
+        r = self.client.patch("/api/dashboard/deals/r1/meta/", {**meta, "recoverable": "no"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        # A reason that only exists in the GHL dropdown is accepted when it is what GHL holds.
+        Deal.objects.filter(pk="r1").update(ghl_loss_reason="Went silent", ghl_loss_notes="no reply")
+        meta = self.client.get("/api/dashboard/deals/r1/").json()["meta"]
+        self.assertEqual((meta["loss_primary_reason"], meta["loss_notes"]), ("Went silent", "no reply"))
+        self.assertEqual(self.client.patch("/api/dashboard/deals/r1/meta/", meta, format="json").status_code, 200)
+        # Choosing "Other" in the dashboard still needs notes.
+        r = self.client.patch("/api/dashboard/deals/r1/meta/", {"loss_primary_reason": "Other", "loss_notes": ""}, format="json")
+        self.assertEqual(r.status_code, 400)
 
     def test_issue_resolve_requires_note(self):
         refresh_issues()

@@ -63,9 +63,9 @@ def deal_detail(ds, deal):
             "ae_commission": _num(deal.ae_commission),
         },
         "meta": {
-            "loss_primary_reason": meta.loss_primary_reason if meta else "",
+            "loss_primary_reason": deal.ghl_loss_reason or (meta.loss_primary_reason if meta else ""),
             "loss_secondary_reason": meta.loss_secondary_reason if meta else "",
-            "loss_notes": meta.loss_notes if meta else "",
+            "loss_notes": deal.ghl_loss_notes or (meta.loss_notes if meta else ""),
             "loss_outcome": meta.loss_outcome if meta else "",
             "competitor": meta.competitor if meta else "",
             "recoverable": meta.recoverable if meta else "",

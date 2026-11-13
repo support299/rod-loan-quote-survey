@@ -70,11 +70,13 @@ class Owners:
         return self.by_ae.get((deal.ae_name or "").lower()), deal.ae_name
 
     def processor(self, deal):
-        for name in (deal.analyst_name, deal.analyst2_name):
+        """Processor 1/2 first (Rod: separate from analysts), then the loan analysts, then the AE."""
+        for name in (deal.processor_name, deal.processor2_name, deal.analyst_name, deal.analyst2_name):
             if name and name.lower() in self.by_analyst:
                 return self.by_analyst[name.lower()], name
-        if deal.analyst_name:
-            return None, deal.analyst_name
+        for name in (deal.processor_name, deal.processor2_name, deal.analyst_name, deal.analyst2_name):
+            if name:
+                return None, name
         return self.ae(deal)
 
     def stage_owner(self, deal):
@@ -149,7 +151,7 @@ def evaluate(ds, owners, activity):
             yield deal, ISSUE_PAUSE_OVERDUE, "medium", (today - meta.pause_review_date).days, {"review_date": meta.pause_review_date.isoformat()}, owners.ae(deal)
 
         if deal.stage_index >= APPROVED_INDEX and not deal.is_lost:
-            missing = [m for m in fin["missing"] if m == "origination_fee"]
+            missing = [m for m in fin["missing"] if m == "opportunity_value"]
             if fin["loan_amount"] is None:
                 missing.append("total_loan_amount")
             if not deal.ae_name:

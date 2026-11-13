@@ -24,6 +24,10 @@ FIELDS = {
     "f_pts": "Origination Points",
     "f_bk": "Broker Name",
     "f_bkfee": "Broker Fee",
+    "f_p1": "Processor 1",
+    "f_p2": "Processor 2",
+    "f_src": "Deal Sourced By",
+    "f_bpb": "Broker Paid By",
 }
 PIPE_IDS = {LOAN_PIPELINE_NAME: "p01", PROCESSING_PIPELINE_NAME: "p02"}
 
@@ -48,7 +52,9 @@ def iso(dt):
 def opp(opp_id="o1", stage="quick_app", status="open", created=None, stage_at=None, **fields):
     created = created or timezone.now() - timedelta(days=20)
     key_to_pipe = {k: p for k, p, _ in STAGE_FLOW}
+    monetary = fields.pop("monetary", None)
     return {
+        "monetaryValue": monetary,
         "id": opp_id,
         "name": f"Deal {opp_id}",
         "pipelineId": PIPE_IDS.get(key_to_pipe.get(stage), "p99"),
@@ -145,6 +151,16 @@ class SyncTests(TestCase):
         self.assertEqual(milestone_in(ds, "onboarded", resolve_period("rolling_30")), [])
         self.assertIsNotNone(ds.ms(ds.deals[0], "onboarded"))  # still used for days-in-stage
 
+    def test_syncs_opportunity_value_processors_and_sourcing(self):
+        deal = upsert_opportunity(opp("v1", stage="processing", monetary=7500.5, f_p1="Shan Iqbal", f_p2="Pranav Bora",
+                                      f_src="AE", f_bpb="Title Company"), self.ctx)
+        self.assertEqual(deal.monetary_value, Decimal("7500.5"))
+        self.assertEqual((deal.processor_name, deal.processor2_name), ("Shan Iqbal", "Pranav Bora"))
+        self.assertEqual((deal.deal_sourced_by, deal.broker_paid_by), ("AE", "Title Company"))
+        deal = upsert_opportunity(opp("v1", stage="processing", f_p1="Pranav Bora"), self.ctx)
+        self.assertIsNone(deal.monetary_value)
+        self.assertEqual(DealEvent.objects.filter(deal=deal, kind="processor_change").count(), 1)
+
     def test_partial_webhook_keeps_status_when_absent(self):
         upsert_opportunity(opp(stage="term_sheet_sent", status="open", f_ae="Rod"), self.ctx)
         partial = {"id": "o1", "pipelineId": "p01", "pipelineStageId": "s_term_sheet_accepted"}
@@ -178,6 +194,40 @@ class FinanceTests(TestCase):
         unknown_ae = deal_financials(Deal(ghl_id="d3", ae_name="Zed", origination_fee=Decimal("1000")), fctx)
         self.assertIn("ae_commission", unknown_ae["missing"])  # never silently zero
 
+    def test_rod_gross_profit_sourcing_and_broker_rules(self):
+        settings = CompanySettings.load()
+        fctx = FinanceContext.build(settings)
+        self.assertEqual((settings.company_sourced_commission_pct, settings.ae_sourced_commission_pct), (30, 50))
+
+        # Opportunity Value is the gross profit and wins over the origination fee.
+        base = dict(ae_name="Zed", monetary_value=Decimal("10000"), origination_fee=Decimal("4000"))
+        company = deal_financials(Deal(ghl_id="g1", deal_sourced_by="Flip Funding", **base), fctx)
+        self.assertEqual((company["revenue"], company["revenue_source"], company["revenue_estimated"]), (Decimal("10000"), "opportunity_value", False))
+        self.assertEqual((company["ae_commission"], company["commission_source"]), (Decimal("3000.00"), "sourced_company"))
+        self.assertEqual(company["profit"], Decimal("7000.00"))
+
+        ae = deal_financials(Deal(ghl_id="g2", deal_sourced_by="ae", **base), fctx)  # case-insensitive
+        self.assertEqual((ae["ae_commission"], ae["commission_source"]), (Decimal("5000.00"), "sourced_ae"))
+
+        # A typed "AE Commission" amount still overrides the % rules.
+        fixed = deal_financials(Deal(ghl_id="g3", deal_sourced_by="AE", ae_commission=Decimal("1200"), **base), fctx)
+        self.assertEqual((fixed["ae_commission"], fixed["commission_source"]), (Decimal("1200"), "field"))
+
+        # Broker: deducted only when Flip Funding pays it.
+        broker = dict(base, deal_sourced_by="Flip Funding", broker_name="Acme", broker_fee=Decimal("1000"))
+        ff = deal_financials(Deal(ghl_id="g4", broker_paid_by="Flip Funding", **broker), fctx)
+        self.assertEqual((ff["broker_cost"], ff["profit"]), (Decimal("1000"), Decimal("6000.00")))
+        title = deal_financials(Deal(ghl_id="g5", broker_paid_by="Title Company", **broker), fctx)
+        self.assertEqual((title["broker_cost"], title["profit"], title["broker_paid_by"]), (Decimal("0"), Decimal("7000.00"), "title_company"))
+        no_fee = deal_financials(Deal(ghl_id="g6", broker_paid_by="Flip Funding", **dict(broker, broker_fee=None)), fctx)
+        self.assertIn("broker_fee", no_fee["missing"])
+
+        # GHL stores 0 for an empty Opportunity Value: fall back to the origination fee, flagged.
+        zero = deal_financials(Deal(ghl_id="g7", ae_name="Zed", deal_sourced_by="AE", monetary_value=Decimal("0"), origination_fee=Decimal("4000")), fctx)
+        self.assertEqual((zero["revenue"], zero["revenue_source"], zero["revenue_estimated"]), (Decimal("4000"), "origination_fee", True))
+        nothing = deal_financials(Deal(ghl_id="g8", ae_name="Zed"), fctx)
+        self.assertIn("opportunity_value", nothing["missing"])
+
 
 class DashboardDataMixin:
     def build(self):
@@ -194,7 +244,7 @@ class DashboardDataMixin:
         # Anna: funded today; Rod: stalled in underwriting.
         upsert_opportunity(opp("a1", stage="quick_app", created=now - timedelta(days=40), f_ae="Anna"), ctx)
         upsert_opportunity(opp("a1", stage="funded", created=now - timedelta(days=40), stage_at=now - timedelta(minutes=5),
-                               f_ae="Anna", f_an="Leoma", f_amt="300000", f_fee="6000"), ctx)
+                               f_ae="Anna", f_an="Cara", f_p1="Leoma", f_src="AE", f_amt="300000", f_fee="6000"), ctx)
         upsert_opportunity(opp("r1", stage="underwriting", created=now - timedelta(days=60), stage_at=now - timedelta(days=20),
                                f_ae="Rod", f_amt="200000", f_fee="4000", contact="c2"), ctx)
         CompanySettings.objects.filter(pk=1).update(coverage_start=now - timedelta(days=90))
@@ -210,7 +260,7 @@ class MetricsTests(DashboardDataMixin, TestCase):
         self.assertEqual(ceo_view["funded_loans"]["count"], 1)
         self.assertEqual(ceo_view["funded_loans"]["volume"], 300000.0)
         self.assertEqual(ceo_view["funded_revenue"]["actual"], 6000.0)
-        self.assertEqual(ceo_view["contribution_profit"]["actual"], 4800.0)
+        self.assertEqual(ceo_view["contribution_profit"]["actual"], 3000.0)  # "AE" sourced: 50% beats her own 20%
         self.assertEqual(ceo_view["intervention"]["count"], 1)
         self.assertEqual(ceo_view["intervention"]["deal_ids"], ["r1"])
         self.assertEqual(len(ceo_view["trends"]), 12)
@@ -219,13 +269,18 @@ class MetricsTests(DashboardDataMixin, TestCase):
         anna_ds = load_dataset(self.anna)
         self.assertEqual([d.ghl_id for d in anna_ds.deals], ["a1"])
         leoma_ds = load_dataset(self.leoma)
-        self.assertEqual([d.ghl_id for d in leoma_ds.deals], ["a1"])
+        self.assertEqual([d.ghl_id for d in leoma_ds.deals], ["a1"])  # via Processor 1
+        cara = get_user_model().objects.create_user("cara@x.com", password="pw123456")
+        DashboardProfile.objects.create(user=cara, role="processor", analyst_name="Cara")
+        self.assertEqual(load_dataset(cara).deals, [])  # a Loan Analyst match is not a processor match
 
     def test_scorecards_ranked_by_profit(self):
         rows = scorecards(load_dataset(self.ceo), resolve_period("mtd"))["rows"]
         self.assertEqual(rows[0]["ae"], "Anna")
         self.assertEqual(rows[0]["funded_count"], 1)
         self.assertEqual(rows[0]["volume"]["target"], 1_000_000.0)
+        self.assertEqual(rows[0]["self_generated"]["self_generated"]["count"], 1)
+        self.assertEqual(rows[0]["self_generated"]["company_assigned"]["count"], 0)
 
 
 class IssueTests(DashboardDataMixin, TestCase):
@@ -351,6 +406,15 @@ class ApiTests(DashboardDataMixin, TestCase):
         # Choosing "Other" in the dashboard still needs notes.
         r = self.client.patch("/api/dashboard/deals/r1/meta/", {"loss_primary_reason": "Other", "loss_notes": ""}, format="json")
         self.assertEqual(r.status_code, 400)
+
+    def test_settings_commission_rates_and_dormant_default(self):
+        self.login("rod@x.com")
+        s = self.client.get("/api/dashboard/settings/").json()
+        self.assertEqual((s["company_sourced_commission_pct"], s["ae_sourced_commission_pct"], s["dormant_days"]), (30.0, 50.0, 30))
+        ok = self.client.patch("/api/dashboard/settings/", {"ae_sourced_commission_pct": 45}, format="json")
+        self.assertEqual(ok.json()["ae_sourced_commission_pct"], 45.0)
+        bad = self.client.patch("/api/dashboard/settings/", {"company_sourced_commission_pct": 120}, format="json")
+        self.assertEqual(bad.status_code, 400)
 
     def test_issue_resolve_requires_note(self):
         refresh_issues()

@@ -30,7 +30,7 @@ from .constants import (
     STAGE_LABELS,
     STATUS_OPEN,
 )
-from .finance import FinanceContext, credited_ae, deal_financials
+from .finance import FinanceContext, credited_ae, deal_financials, sourced_by_ae, sourced_by_company
 from .models import CompanySettings, DashboardProfile, Deal, DealIssue, DealMilestone, MonthlyTarget, SyncRun
 from .periods import business_days, local_today, month_bounds, months_overlapping, prior_period
 
@@ -90,7 +90,7 @@ def base_queryset(user, params=None, system=False):
             qs = qs.filter(**{lookup: value})
     processor = (params.get("processor") or "").strip()
     if processor:
-        qs = qs.filter(Q(analyst_name__iexact=processor) | Q(analyst2_name__iexact=processor))
+        qs = qs.filter(Q(processor_name__iexact=processor) | Q(processor2_name__iexact=processor))
     return qs.select_related("meta")
 
 
@@ -683,6 +683,18 @@ def _prior_funded_contacts(ds, before):
     return {d.contact_id for d in ds.deals if d.is_funded and d.funded_at and d.funded_at < before and d.contact_id}
 
 
+def _sourced_split(funded):
+    """Funded production by the GHL "Deal Sourced By" field (AE = self-generated)."""
+    groups = {"self_generated": [], "company_assigned": [], "unknown": []}
+    for d in funded:
+        key = "self_generated" if sourced_by_ae(d) else "company_assigned" if sourced_by_company(d) else "unknown"
+        groups[key].append(d)
+    return {
+        key: {"count": len(deals), "volume": _num(_sum(d.total_loan_amount for d in deals)), "deal_ids": _ids(deals)}
+        for key, deals in groups.items()
+    }
+
+
 def scorecards(ds, period):
     names = set()
     for d in ds.deals:
@@ -731,7 +743,7 @@ def scorecards(ds, period):
             "submissions": {"count": len(submissions), "deal_ids": _ids(submissions)},
             "conversion": cohort_summary(cohort, ds, MILESTONE_APP_COMPLETE),
             "repeat_borrower": {"count": len(repeat), "volume": _num(_sum(d.total_loan_amount for d in repeat)), "deal_ids": _ids(repeat)},
-            "self_generated": None,
+            "self_generated": _sourced_split(funded),
             "forecast_reliability": None,
             "open_issues": sum(ds.open_issue_counts.get(d.ghl_id, 0) for d in ds.deals if d.ae_name.lower() == low),
             "funded_ids": totals["deal_ids"],
@@ -743,7 +755,8 @@ def scorecards(ds, period):
         "notes": [
             "Funded production is credited to the AE on the loan at closing.",
             "Conversion follows the AE at application (Onboarded).",
-            "Self-generated production and forecast reliability need inputs that do not exist yet.",
+            "Self-generated vs company-assigned uses the GHL \"Deal Sourced By\" field on funded loans.",
+            "Forecast reliability needs an AE forecast input that does not exist yet.",
         ],
     }
 

@@ -17,7 +17,7 @@ class Command(BaseCommand):
         parser.add_argument("--first-name", default="")
         parser.add_argument("--last-name", default="")
         parser.add_argument("--ae-name", default="", help="Value used in the GHL Account Executive dropdown")
-        parser.add_argument("--analyst-name", default="", help="Value used in the GHL Loan Analysts dropdown")
+        parser.add_argument("--analyst-name", default="", help="Processors: their name in the GHL Processor 1/2 dropdowns, e.g. 'Shan Iqbal'")
         parser.add_argument("--ghl-user-id", default="")
         parser.add_argument("--password", default="", help="Omit to be prompted")
 

@@ -24,11 +24,14 @@ class CompanySettings(models.Model):
     default_ae_volume_target = models.DecimalField(max_digits=14, decimal_places=2, default=1_000_000)
     # Used when neither the loan's "AE Commission" field nor the AE's own rate is set.
     default_ae_commission_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    # Rod: % of gross profit by the loan's "Deal Sourced By" field.
+    company_sourced_commission_pct = models.DecimalField(max_digits=5, decimal_places=2, default=30)
+    ae_sourced_commission_pct = models.DecimalField(max_digits=5, decimal_places=2, default=50)
     stall_days_default = models.PositiveIntegerField(default=7)
     stall_days_by_stage = models.JSONField(default=dict, blank=True)
     # Open deals idle longer than this are "dormant": listed separately at low severity
     # so ~1,100 long-idle 01-pipeline leads do not bury the real blockers.
-    dormant_days = models.PositiveIntegerField(default=60)
+    dormant_days = models.PositiveIntegerField(default=30)  # Rod: 30 days with no movement
     no_progress_days = models.PositiveIntegerField(default=14)
     incomplete_application_days = models.PositiveIntegerField(default=10)
     relationship_inactivity_days = models.PositiveIntegerField(default=90)
@@ -62,7 +65,8 @@ class DashboardProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="dashboard_profile")
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     ghl_user_id = models.CharField(max_length=64, blank=True, default="")
-    # Value used in the GHL "Account Executive" / "Loan Analysts" dropdowns, e.g. "Anna".
+    # Value used in the GHL dropdowns: "Account Executive" (AEs, e.g. "Anna") and
+    # "Processor 1"/"Processor 2" (processors, e.g. "Shan Iqbal"; stored in analyst_name).
     ae_name = models.CharField(max_length=128, blank=True, default="")
     analyst_name = models.CharField(max_length=128, blank=True, default="")
     commission_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
@@ -140,6 +144,10 @@ class Deal(models.Model):
     ae_name = models.CharField(max_length=128, blank=True, default="", db_index=True)
     analyst_name = models.CharField(max_length=128, blank=True, default="")
     analyst2_name = models.CharField(max_length=128, blank=True, default="")
+    processor_name = models.CharField(max_length=128, blank=True, default="")
+    processor2_name = models.CharField(max_length=128, blank=True, default="")
+    deal_sourced_by = models.CharField(max_length=64, blank=True, default="")
+    broker_paid_by = models.CharField(max_length=64, blank=True, default="")
     ae_at_application = models.CharField(max_length=128, blank=True, default="")
     ae_at_funding = models.CharField(max_length=128, blank=True, default="")
 
@@ -156,6 +164,8 @@ class Deal(models.Model):
     ghl_loss_reason = models.CharField(max_length=255, blank=True, default="")
     ghl_loss_notes = models.TextField(blank=True, default="")
 
+    # GHL Opportunity Value. Rod: this is the gross profit on the loan.
+    monetary_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     total_loan_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     origination_fee = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     origination_points = models.DecimalField(max_digits=7, decimal_places=3, null=True, blank=True)
@@ -226,6 +236,7 @@ class DealEvent(models.Model):
         ("owner_change", "Owner change"),
         ("ae_change", "AE change"),
         ("analyst_change", "Analyst change"),
+        ("processor_change", "Processor change"),
         ("close_date_change", "Expected close date change"),
         ("left_scope", "Left 01/02 pipelines"),
         ("deleted", "Deleted"),

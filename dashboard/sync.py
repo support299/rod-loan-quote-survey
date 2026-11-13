@@ -33,6 +33,8 @@ from .constants import (
     FIELD_BROKER_EMAIL,
     FIELD_BROKER_FEE,
     FIELD_BROKER_NAME,
+    FIELD_BROKER_PAID_BY,
+    FIELD_DEAL_SOURCED_BY,
     FIELD_ENTITY_NAME,
     FIELD_EXPECTED_CLOSE,
     FIELD_LOAN_ID,
@@ -41,6 +43,8 @@ from .constants import (
     FIELD_ORIGINATION_FEE,
     FIELD_ORIGINATION_POINTS,
     FIELD_PROCESSING_FEE,
+    FIELD_PROCESSOR_1,
+    FIELD_PROCESSOR_2,
     FIELD_PROPERTY_ADDRESS,
     FIELD_REFERRAL_SOURCE,
     FIELD_TERMSHEET_STATUS,
@@ -312,6 +316,10 @@ def normalize_opportunity(opp, ctx):
         "ae_name": ae_name[:128],
         "analyst_name": (text(FIELD_ANALYST) or text(FIELD_ANALYST_NAME))[:128],
         "analyst2_name": text(FIELD_ANALYST_2)[:128],
+        "processor_name": text(FIELD_PROCESSOR_1)[:128],
+        "processor2_name": text(FIELD_PROCESSOR_2)[:128],
+        "deal_sourced_by": text(FIELD_DEAL_SOURCED_BY)[:64],
+        "broker_paid_by": text(FIELD_BROKER_PAID_BY)[:64],
         "loan_id": text(FIELD_LOAN_ID)[:64],
         "program": ctx.programs.get(opp.get("id"), "")[:128],
         "source": (opp.get("source") or "")[:255],
@@ -324,6 +332,7 @@ def normalize_opportunity(opp, ctx):
         "lost_reason_id": opp.get("lostReasonId") or "",
         "ghl_loss_reason": text(FIELD_LOSS_REASON)[:255],
         "ghl_loss_notes": text(FIELD_LOSS_NOTES),
+        "monetary_value": parse_money(opp.get("monetaryValue")),
         "total_loan_amount": parse_money(named.get(FIELD_TOTAL_LOAN_AMOUNT)),
         "origination_fee": parse_money(named.get(FIELD_ORIGINATION_FEE)),
         "origination_points": parse_money(named.get(FIELD_ORIGINATION_POINTS)),
@@ -395,7 +404,7 @@ def upsert_opportunity(opp, ctx, source="sync", partial=False):
             deal = Deal(ghl_id=opp_id)
             old = {}
         else:
-            old = {k: getattr(deal, k) for k in ("stage_key", "stage_name", "status", "assigned_to", "ae_name", "analyst_name", "analyst2_name", "expected_close_date")}
+            old = {k: getattr(deal, k) for k in ("stage_key", "stage_name", "status", "assigned_to", "ae_name", "analyst_name", "analyst2_name", "processor_name", "processor2_name", "expected_close_date")}
         for key, val in values.items():
             setattr(deal, key, val)
         deal.in_scope = True
@@ -434,6 +443,9 @@ def upsert_opportunity(opp, ctx, source="sync", partial=False):
                 if (deal.analyst_name, deal.analyst2_name) != (old["analyst_name"], old["analyst2_name"]):
                     _event(deal, "analyst_change", f"{old['analyst_name']} {old['analyst2_name']}".strip(),
                            f"{deal.analyst_name} {deal.analyst2_name}".strip(), change_at, source)
+                if (deal.processor_name, deal.processor2_name) != (old["processor_name"], old["processor2_name"]):
+                    _event(deal, "processor_change", f"{old['processor_name']} {old['processor2_name']}".strip(),
+                           f"{deal.processor_name} {deal.processor2_name}".strip(), change_at, source)
                 if deal.expected_close_date != old["expected_close_date"]:
                     _event(deal, "close_date_change", old["expected_close_date"], deal.expected_close_date, change_at, source)
 

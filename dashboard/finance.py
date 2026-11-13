@@ -1,23 +1,41 @@
 """
-Revenue and contribution profit per deal.
+Gross profit and contribution profit per deal.
 
 Rules (Rod, Nov 2026, plus the brief):
-  company revenue      = Origination Fee (loan principal and pass-through fees excluded).
-                         If the fee is blank but Origination Points and Total Loan Amount
-                         are set, revenue = points% x amount and is flagged estimated.
-  AE commission        = the loan's "AE Commission" field, else the AE's commission %
-                         (dashboard settings) x revenue, else the company default %.
-  net revenue          = revenue - AE commission  (Rod's "origination fee minus AE commission")
-  contribution profit  = net revenue - Broker Fee (referral payout; Rod: "I will reflect as
-                         Broker fee"). A deal without a broker has no referral cost.
+  gross profit         = the GHL Opportunity Value (Rod: "Opportunity Value = gross profit
+                         on that loan"). If it is blank/0, fall back to the Origination Fee,
+                         else Origination Points x Total Loan Amount; both fallbacks are
+                         flagged as estimated.
+  AE commission        = the loan's "AE Commission" field ($), else a % of gross profit by
+                         the loan's "Deal Sourced By": Flip Funding → 30%, AE → 50% (editable
+                         in Settings), else the AE's own % (Team), else the company default %.
+  net revenue          = gross profit - AE commission
+  broker fee           = deducted only when Flip Funding pays the broker ("Broker Paid By").
+                         Title Company → no cost to Flip Funding. Blank → the old rule: a deal
+                         with a broker costs its Broker Fee, a deal without a broker costs 0.
+  contribution profit  = net revenue - broker fee
 Missing inputs are reported as missing, never silently treated as zero.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from .constants import BROKER_PAID_BY_COMPANY, BROKER_PAID_BY_TITLE, SOURCED_BY_AE, SOURCED_BY_COMPANY
 from .models import CompanySettings, DashboardProfile
 
 HUNDRED = Decimal("100")
+CENT = Decimal("0.01")
+
+
+def _is(value, option):
+    return (value or "").strip().lower() == option.lower()
+
+
+def sourced_by_ae(deal):
+    return _is(deal.deal_sourced_by, SOURCED_BY_AE)
+
+
+def sourced_by_company(deal):
+    return _is(deal.deal_sourced_by, SOURCED_BY_COMPANY)
 
 
 @dataclass
@@ -46,26 +64,55 @@ def credited_ae(deal):
     return deal.ae_at_funding or deal.ae_name or ""
 
 
+def _gross_profit(deal):
+    if deal.monetary_value:  # GHL stores 0 when the value was never entered
+        return deal.monetary_value, "opportunity_value"
+    if deal.origination_fee is not None:
+        return deal.origination_fee, "origination_fee"
+    if deal.origination_points is not None and deal.total_loan_amount:
+        return (deal.origination_points / HUNDRED * deal.total_loan_amount).quantize(CENT), "points_estimate"
+    return None, ""
+
+
+def _commission(deal, revenue, fctx):
+    if deal.ae_commission is not None:
+        return deal.ae_commission, "field", None
+    if revenue is None:
+        return None, "", None
+    s = fctx.settings
+    if sourced_by_company(deal):
+        pct, source = s.company_sourced_commission_pct, "sourced_company"
+    elif sourced_by_ae(deal):
+        pct, source = s.ae_sourced_commission_pct, "sourced_ae"
+    else:
+        pct, source = fctx.commission_pct(credited_ae(deal)), "rate"
+    if pct is None:
+        return None, "", None
+    return (revenue * pct / HUNDRED).quantize(CENT), source, pct
+
+
+def _broker_cost(deal):
+    if _is(deal.broker_paid_by, BROKER_PAID_BY_TITLE):
+        return Decimal("0"), "title_company"
+    if _is(deal.broker_paid_by, BROKER_PAID_BY_COMPANY):
+        return deal.broker_fee, "flip_funding"
+    has_broker = bool(deal.broker_name or deal.broker_email)
+    if deal.broker_fee is not None:
+        return deal.broker_fee, ""  # "Broker Paid By" blank: assumed paid by Flip Funding
+    return (Decimal("0"), "") if not has_broker else (None, "")
+
+
 def deal_financials(deal, fctx):
     missing = []
-    revenue, estimated = deal.origination_fee, False
-    if revenue is None and deal.origination_points is not None and deal.total_loan_amount:
-        revenue = (deal.origination_points / HUNDRED * deal.total_loan_amount).quantize(Decimal("0.01"))
-        estimated = True
+    revenue, revenue_source = _gross_profit(deal)
     if revenue is None:
-        missing.append("origination_fee")
+        missing.append("opportunity_value")
 
-    commission, commission_source = deal.ae_commission, "field" if deal.ae_commission is not None else ""
-    if commission is None and revenue is not None:
-        pct = fctx.commission_pct(credited_ae(deal))
-        if pct is not None:
-            commission = (revenue * pct / HUNDRED).quantize(Decimal("0.01"))
-            commission_source = "rate"
+    commission, commission_source, commission_pct = _commission(deal, revenue, fctx)
     if commission is None:
         missing.append("ae_commission")
 
-    has_broker = bool(deal.broker_name or deal.broker_email)
-    broker_cost = deal.broker_fee if deal.broker_fee is not None else (Decimal("0") if not has_broker else None)
+    broker_cost, broker_paid_by = _broker_cost(deal)
     if broker_cost is None:
         missing.append("broker_fee")
 
@@ -74,10 +121,13 @@ def deal_financials(deal, fctx):
     return {
         "loan_amount": deal.total_loan_amount,
         "revenue": revenue,
-        "revenue_estimated": estimated,
+        "revenue_source": revenue_source,
+        "revenue_estimated": revenue_source in ("origination_fee", "points_estimate"),
         "ae_commission": commission,
         "commission_source": commission_source,
+        "commission_pct": commission_pct,
         "broker_cost": broker_cost,
+        "broker_paid_by": broker_paid_by,
         "net_revenue": net,
         "profit": profit,
         "complete": not missing,

@@ -129,7 +129,7 @@ class OptionsView(APIView):
         def distinct(field):
             return sorted({v for v in qs.values_list(field, flat=True) if v}, key=str.lower)
 
-        processors = sorted(set(distinct("analyst_name")) | set(distinct("analyst2_name")), key=str.lower)
+        processors = sorted(set(distinct("processor_name")) | set(distinct("processor2_name")), key=str.lower)
         return Response({
             "periods": [{"key": k, "label": v} for k, v in PRESETS.items()],
             "stages": [{"key": k, "label": STAGE_LABELS[k], "pipeline": p} for k, p, _ in STAGE_FLOW],
@@ -724,6 +724,15 @@ class SettingsView(APIView):
             return Response({"error": str(exc)}, status=400)
         if s.monthly_volume_target is None:
             return Response({"error": "monthly_volume_target is required"}, status=400)
+        try:
+            for f in ("company_sourced_commission_pct", "ae_sourced_commission_pct"):
+                if f in data:
+                    value = _decimal(data.get(f), f)
+                    if value is None or not 0 <= value <= 100:
+                        raise ValueError(f"{f} must be between 0 and 100")
+                    setattr(s, f, value)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
         for f in ("stall_days_by_stage", "stage_probabilities"):
             if f in data:
                 value = data.get(f) or {}

@@ -8,7 +8,8 @@ from documents.ghl_service import create_location_custom_field, list_location_cu
 class Command(BaseCommand):
     help = (
         "List (default) or create (--apply) the opportunity custom fields the dashboard needs: "
-        "Expected Closing Date, AE Commission, Loan Analyst 2, Loss Reason, Loss Notes, Referral Source."
+        "Expected Closing Date, AE Commission, Loan Analyst 2, Loss Reason, Loss Notes, Referral Source, "
+        "Processor 1, Processor 2, Deal Sourced By, Broker Paid By."
     )
 
     def add_arguments(self, parser):

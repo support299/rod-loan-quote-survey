@@ -2,7 +2,8 @@
 Role access (Rod):
   CEO            – admin, every KPI and deal.
   AE             – only deals assigned to them, KPIs for their own production.
-  Processor      – only deals they are assigned to (up to 2 processors per loan).
+  Processor      – only deals where they are "Processor 1" or "Processor 2" in GHL.
+                   The profile's analyst_name holds their name as used in those dropdowns.
   Analyst        – all loans + general company KPIs.
   Post Closing   – all loans + general company KPIs (draws / servicing are later phase).
 """
@@ -64,7 +65,7 @@ def deal_scope_q(user):
         name = profile.analyst_name
         if not name:
             return Q(pk__in=[])
-        return Q(analyst_name__iexact=name) | Q(analyst2_name__iexact=name)
+        return Q(processor_name__iexact=name) | Q(processor2_name__iexact=name)
     if role in (ROLE_CEO, ROLE_ANALYST, ROLE_POST_CLOSING):
         return None
     return Q(pk__in=[])
@@ -80,7 +81,7 @@ def is_team_member_on_deal(profile, deal):
         return False
     if profile.role in (ROLE_CEO, ROLE_ANALYST, ROLE_POST_CLOSING):
         return True
-    names = {n.lower() for n in (deal.ae_name, deal.analyst_name, deal.analyst2_name) if n}
+    names = {n.lower() for n in (deal.ae_name, deal.analyst_name, deal.analyst2_name, deal.processor_name, deal.processor2_name) if n}
     own = {n.lower() for n in (profile.ae_name, profile.analyst_name) if n}
     return bool(names & own) or (profile.ghl_user_id and profile.ghl_user_id == deal.assigned_to)
 

@@ -86,6 +86,22 @@ FIELD_AE_COMMISSION = "AE Commission"
 FIELD_LOSS_REASON = "Loss Reason"
 FIELD_LOSS_NOTES = "Loss Notes"
 FIELD_REFERRAL_SOURCE = "Referral Source"
+FIELD_PROCESSOR_1 = "Processor 1"
+FIELD_PROCESSOR_2 = "Processor 2"
+FIELD_DEAL_SOURCED_BY = "Deal Sourced By"
+FIELD_BROKER_PAID_BY = "Broker Paid By"
+
+# Rod (Nov 2026): processors are separate from loan analysts, up to 2 per loan.
+PROCESSOR_NAMES = ["Shan Iqbal", "Pranav Bora"]
+# Rod: AE commission is 30% of gross profit when Flip Funding assigned the lead,
+# 50% when the AE sourced the deal (rates editable in Settings).
+SOURCED_BY_COMPANY = "Flip Funding"
+SOURCED_BY_AE = "AE"
+DEAL_SOURCED_BY_OPTIONS = [SOURCED_BY_COMPANY, SOURCED_BY_AE]
+# Rod: the broker is paid either by Flip Funding (out of gross profit) or by the title company.
+BROKER_PAID_BY_COMPANY = "Flip Funding"
+BROKER_PAID_BY_TITLE = "Title Company"
+BROKER_PAID_BY_OPTIONS = [BROKER_PAID_BY_COMPANY, BROKER_PAID_BY_TITLE]
 
 LOSS_REASONS = [
     "Rate or points",
@@ -116,6 +132,10 @@ NEW_GHL_FIELDS = [
     {"name": FIELD_LOSS_REASON, "data_type": "SINGLE_OPTIONS", "options": LOSS_REASONS},
     {"name": FIELD_LOSS_NOTES, "data_type": "LARGE_TEXT"},
     {"name": FIELD_REFERRAL_SOURCE, "data_type": "TEXT"},
+    {"name": FIELD_PROCESSOR_1, "data_type": "SINGLE_OPTIONS", "options": PROCESSOR_NAMES},
+    {"name": FIELD_PROCESSOR_2, "data_type": "SINGLE_OPTIONS", "options": PROCESSOR_NAMES},
+    {"name": FIELD_DEAL_SOURCED_BY, "data_type": "SINGLE_OPTIONS", "options": DEAL_SOURCED_BY_OPTIONS},
+    {"name": FIELD_BROKER_PAID_BY, "data_type": "SINGLE_OPTIONS", "options": BROKER_PAID_BY_OPTIONS},
 ]
 
 # Default probability (%) that an open deal in each stage funds. These are labelled

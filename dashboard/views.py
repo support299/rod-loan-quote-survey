@@ -111,6 +111,27 @@ class MeView(APIView):
         })
 
 
+class ChangePasswordView(APIView):
+    """POST: any signed-in user changes their own password (current password required)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        current = str(request.data.get("current_password") or "")
+        new = str(request.data.get("new_password") or "")
+        if not user.check_password(current):
+            return Response({"error": "Current password is incorrect"}, status=400)
+        if len(new) < 8:
+            return Response({"error": "New password must be at least 8 characters"}, status=400)
+        if new == current:
+            return Response({"error": "New password must be different from the current one"}, status=400)
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        _log(request, "password_changed")
+        return Response({"detail": "Password changed"})
+
+
 class StatusView(APIView):
     permission_classes = [IsAuthenticated]
 

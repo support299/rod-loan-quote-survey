@@ -407,6 +407,18 @@ class ApiTests(DashboardDataMixin, TestCase):
         r = self.client.patch("/api/dashboard/deals/r1/meta/", {"loss_primary_reason": "Other", "loss_notes": ""}, format="json")
         self.assertEqual(r.status_code, 400)
 
+    def test_change_own_password(self):
+        self.login("leoma@x.com")
+        url = "/api/dashboard/me/password/"
+        self.assertEqual(self.client.post(url, {"current_password": "wrong", "new_password": "newpass123"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post(url, {"current_password": "pw123456", "new_password": "short"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post(url, {"current_password": "pw123456", "new_password": "pw123456"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post(url, {"current_password": "pw123456", "new_password": "newpass123"}, format="json").status_code, 200)
+        self.leoma.refresh_from_db()
+        self.assertTrue(self.leoma.check_password("newpass123"))
+        self.client.credentials()
+        self.assertEqual(self.client.post(url, {"current_password": "newpass123", "new_password": "other1234"}, format="json").status_code, 401)
+
     def test_settings_commission_rates_and_dormant_default(self):
         self.login("rod@x.com")
         s = self.client.get("/api/dashboard/settings/").json()

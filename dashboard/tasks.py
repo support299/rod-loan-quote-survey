@@ -54,6 +54,7 @@ def snapshot_forecast():
     data = month_end_forecast(ds)
     data.pop("deal_ids", None)
     data.pop("missing_revenue_ids", None)
+    data.pop("excluded_stalled_ids", None)
     data["taken_at"] = timezone.now().isoformat()
     day = local_today(ds.tz)
     ForecastSnapshot.objects.update_or_create(date=day, defaults={"data": data})

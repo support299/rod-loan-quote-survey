@@ -57,6 +57,8 @@ MILESTONE_APP_COMPLETE = "onboarded"
 MILESTONE_SUBMITTED_UW = "underwriting"
 MILESTONE_APPROVED = "clear_to_close"
 MILESTONE_FUNDED = "funded"
+# Rod: a loan in Funded or Post Closing counts as funded and closed.
+FUNDED_MILESTONES = ("funded", "post_closing")
 
 # GHL opportunity statuses. "abandoned" counts as lost (confirmed by Rod).
 STATUS_OPEN = "open"
@@ -90,6 +92,8 @@ FIELD_PROCESSOR_1 = "Processor 1"
 FIELD_PROCESSOR_2 = "Processor 2"
 FIELD_DEAL_SOURCED_BY = "Deal Sourced By"
 FIELD_BROKER_PAID_BY = "Broker Paid By"
+# Rod (Nov 2026): actual closing date, mainly to back-date loans that closed before go-live.
+FIELD_FUNDED_DATE = "Funded Date"
 
 # Rod (Nov 2026): processors are separate from loan analysts, up to 2 per loan.
 PROCESSOR_NAMES = ["Shan Iqbal", "Pranav Bora"]
@@ -136,6 +140,7 @@ NEW_GHL_FIELDS = [
     {"name": FIELD_PROCESSOR_2, "data_type": "SINGLE_OPTIONS", "options": PROCESSOR_NAMES},
     {"name": FIELD_DEAL_SOURCED_BY, "data_type": "SINGLE_OPTIONS", "options": DEAL_SOURCED_BY_OPTIONS},
     {"name": FIELD_BROKER_PAID_BY, "data_type": "SINGLE_OPTIONS", "options": BROKER_PAID_BY_OPTIONS},
+    {"name": FIELD_FUNDED_DATE, "data_type": "DATE"},
 ]
 
 # Default probability (%) that an open deal in each stage funds. These are labelled

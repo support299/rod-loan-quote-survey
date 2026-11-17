@@ -174,6 +174,8 @@ class Deal(models.Model):
     broker_fee = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     ae_commission = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     expected_close_date = models.DateField(null=True, blank=True)
+    # GHL "Funded Date": the actual closing date; when set, it drives funded_at.
+    ghl_funded_date = models.DateField(null=True, blank=True)
 
     ghl_created_at = models.DateTimeField(null=True, blank=True, db_index=True)
     ghl_updated_at = models.DateTimeField(null=True, blank=True)

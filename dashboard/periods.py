@@ -14,8 +14,13 @@ PRESETS = {
     "ytd": "Year to date",
     "rolling_30": "Rolling 30 days",
     "rolling_90": "Rolling 90 days",
+    "all_time": "All time",
     "custom": "Custom range",
 }
+
+
+# "All time" starts well before any GHL record; there is no prior period or target for it.
+ALL_TIME_START = date(2000, 1, 1)
 
 
 @dataclass
@@ -80,13 +85,17 @@ def resolve_period(key="mtd", start=None, end=None, tz_name="America/New_York"):
         s = today - timedelta(days=29)
     elif key == "rolling_90":
         s = today - timedelta(days=89)
+    elif key == "all_time":
+        s = ALL_TIME_START
     else:
         s = today.replace(day=1)
     return Period(key, s, today, tz)
 
 
 def prior_period(period):
-    """Comparable earlier period of the same elapsed length."""
+    """Comparable earlier period of the same elapsed length (None for "All time")."""
+    if period.key == "all_time":
+        return None
     shift = {
         "mtd": relativedelta(months=1),
         "qtd": relativedelta(months=3),

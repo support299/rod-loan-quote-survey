@@ -10,8 +10,9 @@ lastStageChangeAt for the stage a deal is in when we first see it.
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, time, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
@@ -37,6 +38,7 @@ from .constants import (
     FIELD_DEAL_SOURCED_BY,
     FIELD_ENTITY_NAME,
     FIELD_EXPECTED_CLOSE,
+    FIELD_FUNDED_DATE,
     FIELD_LOAN_ID,
     FIELD_LOSS_NOTES,
     FIELD_LOSS_REASON,
@@ -51,9 +53,9 @@ from .constants import (
     FIELD_TOTAL_LOAN_AMOUNT,
     FIELD_UNDERWRITING_FEE,
     FUNDED_INDEX,
+    FUNDED_MILESTONES,
     LOST_STATUSES,
     MILESTONE_APP_COMPLETE,
-    MILESTONE_FUNDED,
     PIPELINE_KEYS,
     STAGE_FLOW,
     STAGE_INDEX,
@@ -153,6 +155,13 @@ class SyncContext:
     users: dict = field(default_factory=dict)  # ghl user id -> GHLUser
     programs: dict = field(default_factory=dict)  # opportunity id -> loan type
     known_aes: dict = field(default_factory=dict)  # lower name -> canonical AE name
+    timezone_name: str = ""  # company timezone, loaded once per run
+
+    @property
+    def tz(self):
+        if not self.timezone_name:
+            self.timezone_name = CompanySettings.load().timezone
+        return ZoneInfo(self.timezone_name)
 
     @property
     def token(self):
@@ -341,6 +350,7 @@ def normalize_opportunity(opp, ctx):
         "broker_fee": parse_money(named.get(FIELD_BROKER_FEE)),
         "ae_commission": parse_money(named.get(FIELD_AE_COMMISSION)),
         "expected_close_date": parse_day(named.get(FIELD_EXPECTED_CLOSE)),
+        "ghl_funded_date": parse_day(named.get(FIELD_FUNDED_DATE)),
         "ghl_created_at": parse_dt(opp.get("createdAt")),
         "ghl_updated_at": parse_dt(opp.get("updatedAt")),
         "last_stage_change_at": parse_dt(opp.get("lastStageChangeAt")),
@@ -449,19 +459,31 @@ def upsert_opportunity(opp, ctx, source="sync", partial=False):
                 if deal.expected_close_date != old["expected_close_date"]:
                     _event(deal, "close_date_change", old["expected_close_date"], deal.expected_close_date, change_at, source)
 
-        _apply_milestone_fields(deal)
+        _apply_milestone_fields(deal, ctx)
     return deal
 
 
-def _apply_milestone_fields(deal):
+def _funded_at(deal, ctx):
+    """
+    Rod: a loan in Funded or Post Closing counts as funded. The GHL "Funded Date" (actual
+    closing date, noon company time) wins; otherwise the first time the loan was seen in
+    either stage. Loans below Funded keep whatever was recorded before (never cleared).
+    """
+    if deal.stage_index < FUNDED_INDEX:
+        return deal.funded_at
+    if deal.ghl_funded_date:
+        return datetime.combine(deal.ghl_funded_date, time(12), tzinfo=ctx.tz)
+    ms = deal.milestones.filter(key__in=FUNDED_MILESTONES).order_by("reached_at").first()
+    return ms.reached_at if ms else deal.funded_at
+
+
+def _apply_milestone_fields(deal, ctx):
     """funded_at / AE-at-application / AE-at-funding follow observed milestones."""
     changed = []
-    if deal.funded_at is None and deal.stage_index >= FUNDED_INDEX:
-        ms = deal.milestones.filter(key=MILESTONE_FUNDED).first()
-        if ms:
-            deal.funded_at = ms.reached_at
-            changed.append("funded_at")
-        # In Post Closing when first seen: funding date unknown → left empty (coverage gap).
+    funded_at = _funded_at(deal, ctx)
+    if funded_at != deal.funded_at:
+        deal.funded_at = funded_at
+        changed.append("funded_at")
     if deal.stage_index >= FUNDED_INDEX and not deal.ae_at_funding and deal.ae_name:
         deal.ae_at_funding = deal.ae_name
         changed.append("ae_at_funding")

@@ -320,9 +320,17 @@ def _target_window(period):
 
 def period_target(ds, period, attr, profile=None, ae_default=False):
     """Monthly targets; partial months (rolling/custom/today/wtd) are prorated by business days."""
+    if period.key == "all_time":
+        return None  # decades of monthly goals would be meaningless
     start, end = _target_window(period)
+    # Goals apply from January of the go-live year (Rod set them in 2026), so YTD keeps its full-year
+    # goal while a custom range in earlier years (e.g. 2003-2004) shows no goal at all.
+    coverage = ds.settings.coverage_start
+    goals_from = coverage.astimezone(ds.tz).date().replace(month=1, day=1) if coverage else None
     total, any_target = ZERO, False
     for month in months_overlapping(start, end):
+        if goals_from and month < goals_from:
+            continue
         first, last = month_bounds(month)
         value = _monthly_target(ds, month, attr, profile, ae_default)
         if value is None:
@@ -401,9 +409,12 @@ def month_end_forecast(ds):
     actual = _sum(ds.fin[d.ghl_id]["revenue"] for d in actual_deals)
     open_value = ZERO
     missing_revenue, missing_probability, missing_close = [], [], []
-    contributing = []
+    contributing, stalled = [], []
     for d in ds.deals:
         if not is_open(d) or is_paused(d):
+            continue
+        if is_stalled(ds, d) or is_dormant(ds, d):
+            stalled.append(d.ghl_id)  # Rod: left out until the deal moves again
             continue
         if d.expected_close_date and d.expected_close_date > last:
             continue  # expected after this month
@@ -431,9 +442,11 @@ def month_end_forecast(ds):
             "missing_revenue": len(missing_revenue),
             "missing_probability": len(missing_probability),
             "missing_expected_close_date": len(missing_close),
+            "excluded_stalled": len(stalled),
         },
         "deal_ids": contributing,
         "missing_revenue_ids": missing_revenue,
+        "excluded_stalled_ids": stalled,
     }
 
 
@@ -444,7 +457,8 @@ def overview(ds, period):
     target_profile, has_target = scope_target_profile(ds)
 
     funded = financial_totals(ds, funded_in(ds, period))
-    funded_prior = financial_totals(ds, funded_in(ds, prior))
+    # "All time" has no prior period: comparisons are returned as None (no delta shown).
+    funded_prior = financial_totals(ds, funded_in(ds, prior)) if prior else {}
     volume_target = period_target(ds, period, "volume_target", target_profile) if has_target else None
     revenue_target = period_target(ds, period, "revenue_target", target_profile) if has_target else None
 
@@ -470,11 +484,11 @@ def overview(ds, period):
 
     return {
         "period": period.as_dict(),
-        "prior_period": prior.as_dict(),
+        "prior_period": prior.as_dict() if prior else None,
         "pacing": pacing,
         "funded_revenue": {
             "actual": funded["revenue"],
-            "prior": funded_prior["revenue"],
+            "prior": funded_prior.get("revenue"),
             "missing_revenue": funded["revenue_missing"],
             "estimated": funded["revenue_estimated"],
             **_vs_target(funded["revenue"], revenue_target, pace_pct),
@@ -483,7 +497,7 @@ def overview(ds, period):
         "contribution_profit": {
             "actual": funded["profit"],
             "net_revenue": funded["net_revenue"],
-            "prior": funded_prior["profit"],
+            "prior": funded_prior.get("profit"),
             "provisional": funded["provisional"],
             "cost_complete": funded["cost_complete"],
             "deals": funded["count"],
@@ -493,8 +507,8 @@ def overview(ds, period):
             "count": funded["count"],
             "volume": funded["volume"],
             "volume_missing": funded["volume_missing"],
-            "prior_count": funded_prior["count"],
-            "prior_volume": funded_prior["volume"],
+            "prior_count": funded_prior.get("count"),
+            "prior_volume": funded_prior.get("volume"),
             **_vs_target(funded["volume"], volume_target, pace_pct),
             "deal_ids": funded["deal_ids"],
         },
@@ -502,14 +516,14 @@ def overview(ds, period):
             "received": len(apps),
             "complete": len(complete),
             "incomplete": len([d for d in apps if d.furthest_stage_index < APP_COMPLETE_INDEX]),
-            "prior_received": len(created_in(ds, prior)),
-            "prior_complete": len(milestone_in(ds, MILESTONE_APP_COMPLETE, prior)),
+            "prior_received": len(created_in(ds, prior)) if prior else None,
+            "prior_complete": len(milestone_in(ds, MILESTONE_APP_COMPLETE, prior)) if prior else None,
             "received_ids": _ids(apps),
             "complete_ids": _ids(complete),
         },
         "submitted_to_underwriting": {
             "count": len(uw),
-            "prior": len(milestone_in(ds, MILESTONE_SUBMITTED_UW, prior)),
+            "prior": len(milestone_in(ds, MILESTONE_SUBMITTED_UW, prior)) if prior else None,
             "deal_ids": _ids(uw),
         },
         "forecast": month_end_forecast(ds),
@@ -695,6 +709,43 @@ def _sourced_split(funded):
     }
 
 
+def ae_pipelines(ds):
+    """
+    Current open pipeline per AE (Rod: monitor each AE's loans and volume). Not period-scoped;
+    loans without an AE are grouped as "Unassigned". Volume only counts loans that have a
+    Total Loan Amount, so the number of loans with an amount is returned alongside it.
+    """
+    groups = {}
+    for d in ds.deals:
+        if is_open(d):
+            groups.setdefault(d.ae_name or "", []).append(d)
+    rows = []
+    for name, deals in groups.items():
+        stalled = [d for d in deals if is_stalled(ds, d)]
+        dormant = [d for d in deals if is_dormant(ds, d)]
+        with_amount = [d for d in deals if d.total_loan_amount]
+        by_stage = []
+        for key in STAGE_KEYS:
+            in_stage = [d for d in deals if d.stage_key == key]
+            if in_stage:
+                by_stage.append({"stage_key": key, "label": STAGE_LABELS[key], "count": len(in_stage), "deal_ids": _ids(in_stage)})
+        rows.append({
+            "ae": name or "Unassigned",
+            "unassigned": not name,
+            "open": {"count": len(deals), "deal_ids": _ids(deals)},
+            "loan_pipeline": sum(1 for d in deals if d.pipeline_key == "loan"),
+            "processing_pipeline": sum(1 for d in deals if d.pipeline_key == "processing"),
+            "stalled": {"count": len(stalled), "deal_ids": _ids(stalled)},
+            "dormant": {"count": len(dormant), "deal_ids": _ids(dormant)},
+            "volume": _num(_sum(d.total_loan_amount for d in with_amount)),
+            "volume_known": len(with_amount),
+            "gross_profit": _num(_sum(ds.fin[d.ghl_id]["revenue"] for d in deals)),
+            "by_stage": by_stage,
+        })
+    rows.sort(key=lambda r: (r["unassigned"], -r["open"]["count"], r["ae"].lower()))
+    return rows
+
+
 def scorecards(ds, period):
     names = set()
     for d in ds.deals:
@@ -752,8 +803,10 @@ def scorecards(ds, period):
     return {
         "period": period.as_dict(),
         "rows": rows,
+        "pipelines": ae_pipelines(ds),
         "notes": [
             "Funded production is credited to the AE on the loan at closing.",
+            "AE pipelines show today's open loans by the AE on the loan (not period-scoped); volume counts only loans with a Total Loan Amount.",
             "Conversion follows the AE at application (Onboarded).",
             "Self-generated vs company-assigned uses the GHL \"Deal Sourced By\" field on funded loans.",
             "Forecast reliability needs an AE forecast input that does not exist yet.",

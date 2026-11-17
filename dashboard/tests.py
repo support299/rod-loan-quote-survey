@@ -28,6 +28,7 @@ FIELDS = {
     "f_p2": "Processor 2",
     "f_src": "Deal Sourced By",
     "f_bpb": "Broker Paid By",
+    "f_fd": "Funded Date",
 }
 PIPE_IDS = {LOAN_PIPELINE_NAME: "p01", PROCESSING_PIPELINE_NAME: "p02"}
 
@@ -69,6 +70,12 @@ def opp(opp_id="o1", stage="quick_app", status="open", created=None, stage_at=No
         "lastStatusChangeAt": iso(stage_at or created),
         "customFields": [{"id": fid, "fieldValueString": str(v)} for fid, v in fields.items()],
     }
+
+
+def datetime_combine(day, at, tz):
+    from datetime import datetime
+
+    return datetime.combine(day, at, tzinfo=tz)
 
 
 class ParsingTests(TestCase):
@@ -161,6 +168,29 @@ class SyncTests(TestCase):
         self.assertIsNone(deal.monetary_value)
         self.assertEqual(DealEvent.objects.filter(deal=deal, kind="processor_change").count(), 1)
 
+    def test_post_closing_counts_as_funded_and_funded_date_wins(self):
+        from datetime import time as dtime
+        from zoneinfo import ZoneInfo
+
+        created = timezone.now() - timedelta(days=90)
+        moved = timezone.now() - timedelta(days=3)
+        upsert_opportunity(opp("pc", stage="processing", created=created), self.ctx)
+        # Straight to Post Closing (Funded skipped) → funded, dated when it was seen there.
+        deal = upsert_opportunity(opp("pc", stage="post_closing", created=created, stage_at=moved, status="won"), self.ctx)
+        self.assertTrue(deal.is_funded)
+        self.assertEqual(deal.funded_at, DealMilestone.objects.get(deal=deal, key="post_closing").reached_at)
+        # The GHL "Funded Date" back-dates it (noon, company time).
+        deal = upsert_opportunity(opp("pc", stage="post_closing", created=created, status="won", f_fd="2025-03-14"), self.ctx)
+        tz = ZoneInfo(CompanySettings.load().timezone)
+        self.assertEqual(deal.funded_at, datetime_combine(date(2025, 3, 14), dtime(12), tz))
+        # Clearing it falls back to the observed date again.
+        deal = upsert_opportunity(opp("pc", stage="post_closing", created=created, status="won"), self.ctx)
+        self.assertEqual(deal.funded_at, DealMilestone.objects.get(deal=deal, key="post_closing").reached_at)
+        # A Funded Date on a loan that hasn't reached Funded is ignored.
+        early = upsert_opportunity(opp("e1", stage="underwriting", f_fd="2025-03-14"), self.ctx)
+        self.assertIsNone(early.funded_at)
+        self.assertFalse(early.is_funded)
+
     def test_partial_webhook_keeps_status_when_absent(self):
         upsert_opportunity(opp(stage="term_sheet_sent", status="open", f_ae="Rod"), self.ctx)
         partial = {"id": "o1", "pipelineId": "p01", "pipelineStageId": "s_term_sheet_accepted"}
@@ -247,6 +277,7 @@ class DashboardDataMixin:
                                f_ae="Anna", f_an="Cara", f_p1="Leoma", f_src="AE", f_amt="300000", f_fee="6000"), ctx)
         upsert_opportunity(opp("r1", stage="underwriting", created=now - timedelta(days=60), stage_at=now - timedelta(days=20),
                                f_ae="Rod", f_amt="200000", f_fee="4000", contact="c2"), ctx)
+        CompanySettings.load()  # make sure the row exists before setting go-live
         CompanySettings.objects.filter(pk=1).update(coverage_start=now - timedelta(days=90))
 
 
@@ -273,6 +304,43 @@ class MetricsTests(DashboardDataMixin, TestCase):
         cara = get_user_model().objects.create_user("cara@x.com", password="pw123456")
         DashboardProfile.objects.create(user=cara, role="processor", analyst_name="Cara")
         self.assertEqual(load_dataset(cara).deals, [])  # a Loan Analyst match is not a processor match
+
+    def test_all_time_has_no_prior_or_target(self):
+        view = overview(load_dataset(self.ceo), resolve_period("all_time"))
+        self.assertIsNone(view["prior_period"])
+        self.assertEqual(view["funded_loans"]["count"], 1)
+        self.assertIsNone(view["funded_loans"]["prior_count"])
+        self.assertIsNone(view["funded_loans"]["target"])
+        self.assertIsNone(view["applications"]["prior_received"])
+
+    def test_no_goal_for_months_before_go_live(self):
+        from .metrics import period_target
+
+        ds = load_dataset(self.ceo)
+        past = resolve_period("custom", "2003-01-01", "2004-12-31")
+        self.assertIsNone(period_target(ds, past, "volume_target"))
+        self.assertEqual(period_target(ds, resolve_period("mtd"), "volume_target"), Decimal("10000000"))
+        start_year = ds.settings.coverage_start.astimezone(ds.tz).year
+        jan = resolve_period("custom", f"{start_year}-01-01", f"{start_year}-01-31")
+        self.assertEqual(period_target(ds, jan, "volume_target"), Decimal("10000000"))  # same year as go-live
+
+    def test_forecast_leaves_out_stalled_deals(self):
+        from .metrics import month_end_forecast
+
+        f = month_end_forecast(load_dataset(self.ceo))
+        self.assertIn("r1", f["excluded_stalled_ids"])  # 20 days in underwriting
+        self.assertNotIn("r1", f["deal_ids"])
+        self.assertEqual(f["completeness"]["excluded_stalled"], 1)
+
+    def test_ae_pipelines(self):
+        upsert_opportunity(opp("u1", stage="under_review", contact="c9"), make_ctx())
+        rows = scorecards(load_dataset(self.ceo), resolve_period("mtd"))["pipelines"]
+        self.assertEqual([r["ae"] for r in rows], ["Rod", "Unassigned"])  # a1 is funded, so not open
+        rod = rows[0]
+        self.assertEqual((rod["open"]["count"], rod["processing_pipeline"], rod["stalled"]["count"]), (1, 1, 1))
+        self.assertEqual((rod["volume"], rod["volume_known"]), (200000.0, 1))
+        self.assertEqual(rod["by_stage"][0]["stage_key"], "underwriting")
+        self.assertTrue(rows[-1]["unassigned"])
 
     def test_scorecards_ranked_by_profit(self):
         rows = scorecards(load_dataset(self.ceo), resolve_period("mtd"))["rows"]

@@ -1097,6 +1097,12 @@ def _create_survey_contact_note(request, submission, request_id, contact_id, acc
         )
 
 
+SURVEY_SUBMIT_FAILED = (
+    "We couldn't submit your details right now. Please try again in a few minutes, "
+    "or contact us for help."
+)
+
+
 def _submit_loan_quote_survey(request, opportunity_id=None):
     """
     Shared submit path for public (/loan-quote-survey/) and bound (/{id}/opportunity-card/) forms.
@@ -1106,6 +1112,7 @@ def _submit_loan_quote_survey(request, opportunity_id=None):
 
     :return: (submission, created, opportunity_id, location_id, error_message)
     """
+    from .ghl_service import UserFacingError
     from .survey_opportunity import ensure_contact_and_opportunity, get_default_ghl_account
 
     form_data = _parse_opportunity_card_post(request)
@@ -1127,12 +1134,16 @@ def _submit_loan_quote_survey(request, opportunity_id=None):
             account=account,
             lock_existing_contact=lock_contact,
         )
-    except Exception as e:
+    except UserFacingError as e:
+        return None, False, opportunity_id, account.location_id or '', str(e)
+    except Exception:
+        # Full GHL error goes to the log; the form shows a plain message instead of the raw
+        # "400 Client Error ... services.leadconnectorhq.com/..." text.
         logger.exception(
             "Loan Quote Survey contact/opportunity sync failed (opportunity_id=%s)",
             opportunity_id,
         )
-        return None, False, opportunity_id, account.location_id or '', str(e)
+        return None, False, opportunity_id, account.location_id or '', SURVEY_SUBMIT_FAILED
 
     request_id = ghl_summary["opportunity_id"]
     location_id = ghl_summary.get("location_id") or account.location_id or ''

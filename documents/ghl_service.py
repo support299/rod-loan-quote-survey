@@ -2,8 +2,14 @@
 GoHighLevel (GHL) Media API service.
 Uploads files to GHL instead of storing on server; update/delete via GHL API.
 """
+import logging
+
 import requests
 from django.conf import settings
+
+from documents.contact_validation import normalize_phone
+
+logger = logging.getLogger(__name__)
 
 GHL_UPLOAD_URL = "https://services.leadconnectorhq.com/medias/upload-file"
 GHL_MEDIA_BASE = "https://services.leadconnectorhq.com/medias"
@@ -272,6 +278,21 @@ def create_location_custom_field(
     return data.get("customField") or data
 
 
+class UserFacingError(ValueError):
+    """An error whose message is safe and meant to be shown to the person filling the form."""
+
+
+PHONE_IN_USE_MESSAGE = (
+    "This phone number is already linked to a different email address. "
+    "Please use the phone number you've used with us before, or contact us for help."
+)
+
+
+def _same_phone(a, b):
+    na, nb = normalize_phone(a or ""), normalize_phone(b or "")
+    return bool(na) and na == nb
+
+
 def _split_full_name(full_name):
     """Split 'Full Name' into firstName / lastName for GHL contact payloads."""
     parts = (full_name or "").strip().split(None, 1)
@@ -408,6 +429,24 @@ def upsert_contact_by_email_or_phone(
 
     contact_id = (existing or {}).get("id") if existing else None
     if contact_id:
+        if phone and not _same_phone(phone, existing.get("phone")):
+            # GHL doesn't allow two contacts with the same phone, so it would reject the
+            # update with a bare 400. Detect it first and give the person a clear message.
+            try:
+                phone_owner = lookup_duplicate_contact(
+                    location_id, phone=phone, access_token=access_token
+                )
+            except Exception:
+                phone_owner = None
+            owner_id = (phone_owner or {}).get("id")
+            if owner_id and owner_id != contact_id:
+                logger.warning(
+                    "Survey contact conflict: email matches contact %s but phone %s belongs to contact %s",
+                    contact_id,
+                    phone,
+                    owner_id,
+                )
+                raise UserFacingError(PHONE_IN_USE_MESSAGE)
         contact = update_contact(
             contact_id,
             full_name=full_name,

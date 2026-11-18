@@ -8,6 +8,7 @@ from django.core.cache import cache
 
 from accounts.models import GHLAuthCredentials
 from documents.ghl_service import (
+    UserFacingError,
     create_opportunity,
     get_contact,
     get_opportunity,
@@ -471,7 +472,7 @@ def ensure_contact_and_opportunity(
     if opportunity_id and lock_existing_contact:
         linked = fetch_opportunity_linked_contact(opportunity_id, account=account)
         if not linked or not linked.get("contact_id"):
-            raise ValueError(
+            raise UserFacingError(
                 "This opportunity has no associated contact in GHL. "
                 "Link a contact on the opportunity, then try again."
             )
@@ -495,7 +496,7 @@ def ensure_contact_and_opportunity(
         email = (form_data.get("email") or "").strip()
         phone = (form_data.get("phone") or "").strip()
         if not full_name or not email or not phone:
-            raise ValueError("Full Name, Email, and Phone are required.")
+            raise UserFacingError("Full Name, Email, and Phone are required.")
 
         from documents.contact_validation import (
             is_valid_email,
@@ -504,15 +505,15 @@ def ensure_contact_and_opportunity(
         )
 
         if not is_valid_full_name(full_name):
-            raise ValueError(
+            raise UserFacingError(
                 "Enter a valid name using letters "
                 "(spaces and - ' . allowed between name parts)."
             )
         if not is_valid_email(email):
-            raise ValueError("Enter a valid email address (e.g. name@example.com).")
+            raise UserFacingError("Enter a valid email address (e.g. name@example.com).")
         phone = normalize_phone(phone)
         if not phone:
-            raise ValueError(
+            raise UserFacingError(
                 "Enter a valid phone number (e.g. +1 555 123 4567 or (415) 555-1234)."
             )
         form_data["phone"] = phone

@@ -128,7 +128,6 @@ def update_opportunity_custom_fields(opportunity_id, custom_fields, access_token
     if not custom_fields:
         return {}
 
-    print("access_token", access_token)
     headers = _auth_headers(access_token)
     headers["Content-Type"] = "application/json"
     url = f"{GHL_OPPORTUNITIES_BASE}/{opportunity_id}"

@@ -2186,6 +2186,93 @@ def user_upload_page(request, request_id):
     return render(request, 'documents/user_upload.html', context)
 
 
+PROCESSING_CONTACT_LABELS = {"title_company": "Title company", "insurance_agent": "Insurance agent"}
+PROCESSING_CONTACT_MAX_LEN = {"name": 255, "email": 254, "phone": 64}
+
+
+def _save_processing_contact_field(request, doc_request, section, data):
+    """
+    Autosave one field (name, email or phone) of the Title Company / Insurance Agent block.
+    Body: {section, field: name|email|phone, value}. A blank value clears the field.
+    Phone is validated and stored in E.164 (+14155551234), the same format as the survey.
+    """
+    from .contact_validation import is_valid_email, normalize_phone
+
+    field = (data.get("field") or "").strip().lower()
+    if field not in PROCESSING_CONTACT_MAX_LEN:
+        return JsonResponse({"error": "field must be 'name', 'email' or 'phone'."}, status=400)
+    value = str(data.get("value") or "").strip()
+    label = PROCESSING_CONTACT_LABELS[section]
+
+    if len(value) > PROCESSING_CONTACT_MAX_LEN[field]:
+        return JsonResponse({"error": "This is too long.", "field": field}, status=400)
+    if field == "email" and value and not is_valid_email(value):
+        return JsonResponse(
+            {"error": "Enter a valid email address (e.g. name@example.com), or leave it blank.", "field": field},
+            status=400,
+        )
+    if field == "phone" and value:
+        normalized = normalize_phone(value)
+        if not normalized:
+            return JsonResponse(
+                {"error": "Enter a valid phone number (e.g. (415) 555-1234), or leave it blank.", "field": field},
+                status=400,
+            )
+        value = normalized
+
+    attr = f"{section}_{field}"
+    if getattr(doc_request, attr) == value:
+        return JsonResponse({"success": True, "field": field, "value": value, "unchanged": True, "message": "Saved."})
+
+    setattr(doc_request, attr, value)
+    doc_request.save(update_fields=[attr, "updated_at"])
+
+    ghl_result = {"skipped": True, "reason": "no_account"}
+    try:
+        from .survey_ghl_fields import (
+            GHL_OPPORTUNITY_INSURANCE_AGENT_EMAIL,
+            GHL_OPPORTUNITY_INSURANCE_AGENT_NAME,
+            GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE,
+            GHL_OPPORTUNITY_TITLE_COMPANY_EMAIL,
+            GHL_OPPORTUNITY_TITLE_COMPANY_NAME,
+            GHL_OPPORTUNITY_TITLE_COMPANY_PHONE,
+        )
+        from .survey_opportunity import get_default_ghl_account
+        from .survey_sync import sync_opportunity_named_fields
+
+        ghl_field = {
+            "title_company": {
+                "name": GHL_OPPORTUNITY_TITLE_COMPANY_NAME,
+                "email": GHL_OPPORTUNITY_TITLE_COMPANY_EMAIL,
+                "phone": GHL_OPPORTUNITY_TITLE_COMPANY_PHONE,
+            },
+            "insurance_agent": {
+                "name": GHL_OPPORTUNITY_INSURANCE_AGENT_NAME,
+                "email": GHL_OPPORTUNITY_INSURANCE_AGENT_EMAIL,
+                "phone": GHL_OPPORTUNITY_INSURANCE_AGENT_PHONE,
+            },
+        }[section][field]
+        account = doc_request.ghl_account if doc_request.ghl_account_id else None
+        account = account or get_default_ghl_account()
+        ghl_kw = _ghl_token_kwargs(request, json_body=data, doc_request=doc_request)
+        ghl_result = sync_opportunity_named_fields(
+            doc_request.request_id,
+            {ghl_field: value},
+            account=account,
+            access_token=ghl_kw.get("access_token"),
+            allow_blank=True,  # clearing the field here clears it in GHL too
+        )
+    except Exception as e:
+        logger.warning(
+            "%s %s GHL sync failed for %s: %s", label, field, doc_request.request_id, e, exc_info=True
+        )
+        ghl_result = {"skipped": True, "reason": "sync_error"}
+
+    return JsonResponse(
+        {"success": True, "field": field, "value": value, "message": "Saved.", "ghl": ghl_result}
+    )
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def save_processing_contact_info(request, request_id):
@@ -2205,6 +2292,9 @@ def save_processing_contact_info(request, request_id):
                 {"error": "section must be 'title_company' or 'insurance_agent'."},
                 status=400,
             )
+
+        if data.get("field"):
+            return _save_processing_contact_field(request, doc_request, section, data)
 
         if section == "title_company":
             name = (data.get("title_company_name") or data.get("name") or "").strip()

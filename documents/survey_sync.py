@@ -436,10 +436,12 @@ def sync_opportunity_named_fields(
     values_by_field_name,
     account=None,
     access_token=None,
+    allow_blank=False,
 ):
     """
     Write a dict of {GHL field display name: value} onto an opportunity.
-    Empty values are skipped. Missing GHL fields are reported, not created.
+    Empty values are skipped unless allow_blank (then they clear the field in GHL).
+    Missing GHL fields are reported, not created.
     """
     from documents.survey_opportunity import get_default_ghl_account
 
@@ -451,7 +453,7 @@ def sync_opportunity_named_fields(
     pairs = [
         (name, (value or "").strip())
         for name, value in (values_by_field_name or {}).items()
-        if (value or "").strip()
+        if allow_blank or (value or "").strip()
     ]
     if not pairs:
         return {"skipped": True, "reason": "empty_payload"}

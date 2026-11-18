@@ -524,35 +524,18 @@
             outline: 2px solid rgba(37, 99, 235, 0.25);
             border-color: var(--accent);
         }
-        .title-company-actions {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-top: 14px;
-            flex-wrap: wrap;
+        .title-field input.is-invalid {
+            border-color: var(--danger);
+            outline-color: rgba(220, 38, 38, 0.2);
         }
-        .btn-title-submit {
-            border: 0;
-            border-radius: 10px;
-            padding: 10px 14px;
-            font: inherit;
-            font-size: 13px;
-            font-weight: 700;
-            background: var(--ink);
-            color: #fff;
-            cursor: pointer;
-        }
-        .btn-title-submit:disabled {
-            opacity: 0.65;
-            cursor: wait;
-        }
-        .title-company-status {
-            font-size: 13px;
+        .pc-status {
+            min-height: 16px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--muted);
         }
-        .title-company-status.is-ok { color: #15803d; }
-        .title-company-status.is-err { color: var(--danger); }
+        .pc-status.is-ok { color: #15803d; }
+        .pc-status.is-err { color: var(--danger); }
 
         @media (max-width: 640px) {
             .hero, .panel { padding: 18px; }
@@ -724,38 +707,22 @@
             setTimeout(() => { container.innerHTML = ''; }, 5000);
         }
 
-        async function submitProcessingContact(btn) {
-            const card = btn.closest('.title-company-card');
-            if (!card) return;
-            const statusEl = card.querySelector('.title-company-status');
-            const section = card.getAttribute('data-section') || '';
-            const name = (card.querySelector('.pc-name')?.value || '').trim();
-            const email = (card.querySelector('.pc-email')?.value || '').trim();
-            const phone = (card.querySelector('.pc-phone')?.value || '').trim();
+        // Title Company / Insurance Agent: each field saves on its own when the person leaves it.
+        async function saveProcessingContactField(input) {
+            const card = input.closest('.title-company-card');
+            const statusEl = input.parentElement.querySelector('.pc-status');
+            const field = input.dataset.field;
+            const value = input.value.trim();
+            if (value === (input.dataset.saved || '')) return;
+            // Ignore a slower, older response if the field was saved again since.
+            const seq = (input._pcSeq || 0) + 1;
+            input._pcSeq = seq;
 
-            statusEl.className = 'title-company-status';
-            statusEl.textContent = '';
-
-            if (!name && !email && !phone) {
-                statusEl.classList.add('is-err');
-                statusEl.textContent = 'Enter at least one field to save.';
-                return;
-            }
-
-            btn.disabled = true;
-            const prevLabel = btn.textContent;
-            btn.textContent = 'Saving…';
+            statusEl.className = 'pc-status';
+            statusEl.textContent = 'Saving…';
+            input.classList.remove('is-invalid');
             try {
-                let body = { section: section, name: name, email: email, phone: phone };
-                if (section === 'title_company') {
-                    body.title_company_name = name;
-                    body.title_company_email = email;
-                    body.title_company_phone = phone;
-                } else if (section === 'insurance_agent') {
-                    body.insurance_agent_name = name;
-                    body.insurance_agent_email = email;
-                    body.insurance_agent_phone = phone;
-                }
+                let body = { section: card.dataset.section || '', field: field, value: value };
                 if (typeof withLocationJsonBody === 'function') {
                     body = withLocationJsonBody(body);
                 }
@@ -765,19 +732,39 @@
                     body: JSON.stringify(body)
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || 'Failed to save contact info');
+                if (seq !== input._pcSeq) return;
+                if (!res.ok) throw new Error(data.error || 'Could not save. Please try again.');
+                const saved = data.value ?? value;
+                input.dataset.saved = saved;
+                // Only reformat (e.g. phone → +14155551234) if the person hasn't typed since.
+                if (input.value.trim() === value) input.value = saved;
                 statusEl.classList.add('is-ok');
-                statusEl.textContent = data.message || 'Saved to opportunity.';
-                showAlert(data.message || 'Contact info saved.', 'success');
+                statusEl.textContent = saved ? 'Saved.' : 'Cleared.';
             } catch (err) {
+                if (seq !== input._pcSeq) return;
+                input.classList.add('is-invalid');
                 statusEl.classList.add('is-err');
-                statusEl.textContent = err.message || 'Save failed';
-                showAlert(err.message || 'Failed to save contact info', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = prevLabel;
+                statusEl.textContent = err.message || 'Could not save. Please try again.';
             }
         }
+
+        function initProcessingContactAutosave() {
+            document.querySelectorAll('.title-company-card .pc-input').forEach((input) => {
+                input.dataset.saved = input.value.trim();
+                input.addEventListener('blur', () => saveProcessingContactField(input));
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                });
+                input.addEventListener('input', () => {
+                    const statusEl = input.parentElement.querySelector('.pc-status');
+                    if (statusEl.classList.contains('is-ok')) {
+                        statusEl.className = 'pc-status';
+                        statusEl.textContent = '';
+                    }
+                });
+            });
+        }
+        initProcessingContactAutosave();
 
         function openConfirmModal(options) {
             const overlay = document.getElementById('confirm-modal');

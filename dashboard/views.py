@@ -3,7 +3,7 @@ REST API for the standalone CEO dashboard frontend (JWT auth).
 All routes live under /api/dashboard/.
 """
 import logging
-from datetime import datetime, time, timezone as dt_timezone
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import get_user_model
@@ -12,11 +12,12 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
-from . import ghl_client, metrics
+from . import ghl_client, invites, metrics
 from .access import (
     MODULES_BY_ROLE,
     get_profile,
@@ -130,6 +131,75 @@ class ChangePasswordView(APIView):
         user.save(update_fields=["password"])
         _log(request, "password_changed")
         return Response({"detail": "Password changed"})
+
+
+MIN_PASSWORD = 8
+FORGOT_PASSWORD_COOLDOWN = timedelta(minutes=2)
+LINK_INVALID = "This link has expired or has already been used. Ask for a new one."
+
+
+class ForgotPasswordThrottle(AnonRateThrottle):
+    rate = "10/hour"
+
+
+class ForgotPasswordView(APIView):
+    """
+    POST {email}: email a password-reset link (through GHL) if the address belongs to an
+    active dashboard user. Always answers the same way, so it can't be used to find accounts.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ForgotPasswordThrottle]
+
+    def post(self, request):
+        email = str(request.data.get("email") or "").strip().lower()
+        answer = Response({"detail": "If that email belongs to a dashboard user, a reset link is on its way."})
+        if not email:
+            return Response({"error": "Enter your email address."}, status=400)
+        user = (
+            get_user_model().objects.filter(Q(email__iexact=email) | Q(username__iexact=email), is_active=True,
+                                            dashboard_profile__isnull=False).first()
+        )
+        if not user:
+            return answer
+        recent = ActivityLog.objects.filter(
+            user=user, action="password_reset_requested", created_at__gte=timezone.now() - FORGOT_PASSWORD_COOLDOWN
+        ).exists()
+        if recent:
+            return answer
+        ActivityLog.objects.create(user=user, action="password_reset_requested", detail={})
+        kind = invites.KIND_RESET if user.has_usable_password() else invites.KIND_INVITE
+        try:
+            invites.send_link(user, kind)
+        except Exception:  # any failure must still give the same answer (no account probing, no 500)
+            logger.exception("Forgot-password email failed for user %s", user.pk)
+        return answer
+
+
+class SetPasswordView(APIView):
+    """
+    POST {kind, uid, token}: check an invite / reset link (returns who it is for).
+    POST {kind, uid, token, password}: set the password; the link then stops working.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        kind = str(request.data.get("kind") or "")
+        user = invites.user_from_link(kind, str(request.data.get("uid") or ""), str(request.data.get("token") or ""))
+        if not user:
+            return Response({"error": LINK_INVALID}, status=400)
+        if "password" not in request.data:
+            return Response({"valid": True, "kind": kind, "email": invites.user_email(user), "name": user.get_full_name()})
+        password = str(request.data.get("password") or "")
+        if len(password) < MIN_PASSWORD:
+            return Response({"error": f"Password must be at least {MIN_PASSWORD} characters"}, status=400)
+        user.set_password(password)
+        user.save(update_fields=["password"])
+        ActivityLog.objects.create(user=user, action="password_set_from_link", detail={"kind": kind})
+        return Response({"detail": "Password set. You can sign in now.", "email": invites.user_email(user)})
 
 
 class StatusView(APIView):
@@ -659,23 +729,64 @@ class TeamView(APIView):
         data = request.data
         email = str(data.get("email") or "").strip().lower()
         password = str(data.get("password") or "")
+        send_invite = bool(data.get("send_invite"))
         role = data.get("role")
-        if not email or len(password) < 8 or role not in dict(ROLE_CHOICES):
-            return Response({"error": "email, password (8+ chars) and a valid role are required"}, status=400)
+        if not email or "@" not in email or role not in dict(ROLE_CHOICES):
+            return Response({"error": "A valid email and role are required"}, status=400)
+        if not send_invite and len(password) < MIN_PASSWORD:
+            return Response({"error": f"Enter a password ({MIN_PASSWORD}+ characters) or choose to send an invite email"}, status=400)
         User = get_user_model()
         if User.objects.filter(Q(username__iexact=email) | Q(email__iexact=email)).exists():
             return Response({"error": "A user with this email already exists"}, status=400)
         try:
             with transaction.atomic():
-                user = User.objects.create_user(username=email, email=email, password=password,
+                # With an invite the person sets their own password from the email link.
+                user = User.objects.create_user(username=email, email=email, password=None if send_invite else password,
                                                 first_name=str(data.get("first_name") or ""), last_name=str(data.get("last_name") or ""))
                 profile = DashboardProfile(user=user, role=role)
                 _apply_profile(profile, data)
                 profile.save()
         except ValueError as exc:
             return Response({"error": str(exc)}, status=400)
-        _log(request, "team_member_created", profile_id=profile.id, role=role)
-        return Response(team_member(profile), status=201)
+        _log(request, "team_member_created", profile_id=profile.id, role=role, invite=send_invite)
+        result = team_member(profile)
+        if send_invite:
+            result["invite"] = _send_invite(request, profile)
+        return Response(result, status=201)
+
+
+def _send_invite(request, profile):
+    """Send the invite (or a reset link, if they already have a password). Returns {sent, error}."""
+    user = profile.user
+    kind = invites.KIND_RESET if user.has_usable_password() else invites.KIND_INVITE
+    try:
+        invites.send_link(user, kind)
+    except Exception as exc:
+        # InviteError messages are written for the admin; anything else gets a generic one.
+        error = str(exc) if isinstance(exc, invites.InviteError) else "Could not send the email. Please try again."
+        if not isinstance(exc, invites.InviteError):
+            logger.exception("Dashboard %s email for profile %s failed", kind, profile.id)
+        _log(request, "invite_failed", profile_id=profile.id, kind=kind, error=error)
+        return {"sent": False, "kind": kind, "error": error}
+    _log(request, "invite_sent", profile_id=profile.id, kind=kind)
+    return {"sent": True, "kind": kind, "error": ""}
+
+
+class TeamInviteView(APIView):
+    """POST: (re)send the invite email, or a password-reset email if they already set a password (CEO)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, profile_id):
+        if not is_ceo(request.user):
+            return Response({"error": "Only the CEO can manage the team"}, status=403)
+        profile = get_object_or_404(DashboardProfile.objects.select_related("user"), pk=profile_id)
+        if not profile.user.is_active:
+            return Response({"error": "This login is deactivated. Activate it first."}, status=400)
+        result = _send_invite(request, profile)
+        if not result["sent"]:
+            return Response({"error": result["error"], **result}, status=502)
+        return Response(result)
 
 
 def _apply_profile(profile, data):

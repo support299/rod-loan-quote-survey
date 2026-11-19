@@ -174,6 +174,8 @@ def team_member(profile):
         "name": profile.display_name,
         "role": profile.role,
         "is_active": user.is_active,
+        "has_password": user.has_usable_password(),  # False = invite sent, password not set yet
+        "last_login": user.last_login.isoformat() if user.last_login else None,
         "ghl_user_id": profile.ghl_user_id,
         "ae_name": profile.ae_name,
         "analyst_name": profile.analyst_name,

@@ -507,3 +507,166 @@ class ApiTests(DashboardDataMixin, TestCase):
         self.assertEqual(r.json()["status"], "resolved")
         r = self.client.patch(f"/api/dashboard/exceptions/{issue.id}/", {"action": "snooze", "snooze_reason": "x"}, format="json")
         self.assertEqual(r.status_code, 400)
+
+
+class InviteAndPasswordResetTests(TestCase):
+    """Invite / forgot-password links: GHL sends the email, the dashboard checks the link and sets the password."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.ceo = User.objects.create_user("rod@x.com", email="rod@x.com", password="pw123456")
+        DashboardProfile.objects.create(user=self.ceo, role="ceo")
+        self.client = APIClient()
+        resp = self.client.post("/api/dashboard/auth/login/", {"username": "rod@x.com", "password": "pw123456"}, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.json()['access']}")
+        patcher = mock.patch("dashboard.invites.send_link", return_value="contact1")
+        self.send = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _link_parts(self, user, kind):
+        from urllib.parse import parse_qs, urlparse
+
+        from .invites import make_link
+
+        q = parse_qs(urlparse(make_link(user, kind)).query)
+        return {"kind": q["kind"][0], "uid": q["uid"][0], "token": q["token"][0]}
+
+    def _create(self, **extra):
+        body = {"email": "Anna@X.com", "first_name": "Anna", "role": "ae", "ae_name": "Anna", **extra}
+        return self.client.post("/api/dashboard/team/", body, format="json")
+
+    def test_create_with_invite_needs_no_password(self):
+        resp = self._create(send_invite=True)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()
+        self.assertFalse(data["has_password"])
+        self.assertEqual(data["invite"], {"sent": True, "kind": "invite", "error": ""})
+        user = get_user_model().objects.get(username="anna@x.com")
+        self.assertFalse(user.has_usable_password())
+        self.send.assert_called_once_with(user, "invite")
+
+    def test_create_without_invite_still_needs_password(self):
+        self.assertEqual(self._create().status_code, 400)
+        self.assertEqual(self._create(password="pw123456").status_code, 201)
+        self.send.assert_not_called()
+
+    def test_invite_failure_keeps_the_user_and_reports_error(self):
+        from .invites import InviteError
+
+        self.send.side_effect = InviteError('The GHL contact field "Dashboard Invite Link" is missing.')
+        resp = self._create(send_invite=True)
+        self.assertEqual(resp.status_code, 201)
+        self.assertFalse(resp.json()["invite"]["sent"])
+        self.assertIn("missing", resp.json()["invite"]["error"])
+        self.assertTrue(get_user_model().objects.filter(username="anna@x.com").exists())
+
+    def test_resend_invite_ceo_only_and_reset_once_password_set(self):
+        profile_id = self._create(send_invite=True).json()["id"]
+        url = f"/api/dashboard/team/{profile_id}/invite/"
+        self.assertEqual(self.client.post(url).json()["kind"], "invite")
+        anna = get_user_model().objects.get(username="anna@x.com")
+        anna.set_password("annapass1")
+        anna.save()
+        self.assertEqual(self.client.post(url).json()["kind"], "reset")
+        other = APIClient()
+        tok = other.post("/api/dashboard/auth/login/", {"username": "anna@x.com", "password": "annapass1"}, format="json").json()["access"]
+        other.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        self.assertEqual(other.post(url).status_code, 403)
+
+    def test_invite_link_sets_password_once(self):
+        self._create(send_invite=True)
+        anna = get_user_model().objects.get(username="anna@x.com")
+        parts = self._link_parts(anna, "invite")
+        url = "/api/dashboard/auth/set-password/"
+        anon = APIClient()
+        check = anon.post(url, parts, format="json")
+        self.assertEqual(check.status_code, 200)
+        self.assertEqual(check.json()["email"], "anna@x.com")
+        self.assertEqual(anon.post(url, {**parts, "password": "short"}, format="json").status_code, 400)
+        self.assertEqual(anon.post(url, {**parts, "password": "annapass1"}, format="json").status_code, 200)
+        self.assertEqual(anon.post(url, {**parts, "password": "annapass2"}, format="json").status_code, 400)  # used
+        login = anon.post("/api/dashboard/auth/login/", {"username": "anna@x.com", "password": "annapass1"}, format="json")
+        self.assertEqual(login.status_code, 200)
+
+    def test_bad_wrong_kind_and_expired_links_rejected(self):
+        from .invites import TOKENS
+
+        self.ceo.refresh_from_db()  # signing in (setUp) changed last_login, which old links depend on
+        parts = self._link_parts(self.ceo, "reset")
+        url = "/api/dashboard/auth/set-password/"
+        anon = APIClient()
+        self.assertEqual(anon.post(url, parts, format="json").status_code, 200)
+        self.assertEqual(anon.post(url, {**parts, "token": parts["token"] + "x"}, format="json").status_code, 400)
+        self.assertEqual(anon.post(url, {**parts, "kind": "invite"}, format="json").status_code, 400)
+        self.assertEqual(anon.post(url, {**parts, "uid": "zzz"}, format="json").status_code, 400)
+        later = TOKENS["reset"]._now() + timedelta(days=2)  # reset links last 1 day
+        with mock.patch.object(TOKENS["reset"], "_now", return_value=later):
+            self.assertEqual(anon.post(url, parts, format="json").status_code, 400)
+        self.ceo.is_active = False
+        self.ceo.save()
+        self.assertEqual(anon.post(url, parts, format="json").status_code, 400)
+
+    def test_forgot_password_same_answer_and_cooldown(self):
+        url = "/api/dashboard/auth/forgot-password/"
+        anon = APIClient()
+        known = anon.post(url, {"email": "ROD@x.com"}, format="json")
+        unknown = anon.post(url, {"email": "nobody@x.com"}, format="json")
+        self.assertEqual(known.status_code, 200)
+        self.assertEqual(known.json(), unknown.json())
+        self.send.assert_called_once_with(self.ceo, "reset")
+        anon.post(url, {"email": "rod@x.com"}, format="json")  # within the cooldown
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(anon.post(url, {"email": ""}, format="json").status_code, 400)
+
+    def test_forgot_password_ignores_users_without_dashboard_access(self):
+        get_user_model().objects.create_user("plain@x.com", email="plain@x.com", password="pw123456")
+        APIClient().post("/api/dashboard/auth/forgot-password/", {"email": "plain@x.com"}, format="json")
+        self.send.assert_not_called()
+
+    def test_unexpected_ghl_failure_is_handled(self):
+        self.send.side_effect = KeyError("boom")
+        forgot = APIClient().post("/api/dashboard/auth/forgot-password/", {"email": "rod@x.com"}, format="json")
+        self.assertEqual(forgot.status_code, 200)  # same answer as always, no 500
+        created = self._create(send_invite=True)
+        self.assertEqual(created.status_code, 201)
+        self.assertFalse(created.json()["invite"]["sent"])
+        self.assertEqual(created.json()["invite"]["error"], "Could not send the email. Please try again.")
+
+
+class InviteGhlTests(TestCase):
+    """What send_link does in GHL: link field first, then remove + add the trigger tag."""
+
+    def test_send_link_writes_field_then_retriggers_tag(self):
+        from . import invites
+
+        user = get_user_model().objects.create_user("mae@x.com", password="pw123456")  # email only in the login
+        account = SimpleNamespace(location_id="loc", access_token="tok")
+        calls = []
+        with mock.patch("documents.survey_opportunity.get_default_ghl_account", return_value=account), \
+                mock.patch.object(invites, "list_location_custom_fields",
+                                  return_value=[{"id": "f-reset", "name": "Dashboard Password Reset Link"}]), \
+                mock.patch.object(invites, "lookup_duplicate_contact", return_value=None), \
+                mock.patch.object(invites.requests, "post") as post, \
+                mock.patch.object(invites, "update_contact_custom_fields",
+                                  side_effect=lambda *a, **k: calls.append(("field", a[1][0]["id"]))), \
+                mock.patch.object(invites, "_tags", side_effect=lambda m, c, t, tok: calls.append((m, tuple(t)))):
+            post.return_value = mock.Mock(content=b"x", json=lambda: {"contact": {"id": "c9"}}, raise_for_status=lambda: None)
+            self.assertEqual(invites.send_link(user, "reset"), "c9")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["email"], "mae@x.com")
+        self.assertEqual(payload["tags"], ["dashboard user"])  # tagged from creation, before any workflow runs
+        self.assertEqual(calls, [
+            ("field", "f-reset"),
+            ("DELETE", ("dashboard-password-reset",)),
+            ("POST", ("dashboard user", "dashboard-password-reset")),
+        ])
+
+    def test_missing_field_is_a_clear_error(self):
+        from . import invites
+
+        user = get_user_model().objects.create_user("mae@x.com", email="mae@x.com", password="pw123456")
+        account = SimpleNamespace(location_id="loc", access_token="tok")
+        with mock.patch("documents.survey_opportunity.get_default_ghl_account", return_value=account), \
+                mock.patch.object(invites, "list_location_custom_fields", return_value=[]):
+            with self.assertRaisesMessage(invites.InviteError, "Dashboard Invite Link"):
+                invites.send_link(user, "invite")

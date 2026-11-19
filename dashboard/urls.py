@@ -6,6 +6,8 @@ from . import views
 urlpatterns = [
     path("auth/login/", TokenObtainPairView.as_view(), name="dashboard-login"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="dashboard-token-refresh"),
+    path("auth/forgot-password/", views.ForgotPasswordView.as_view(), name="dashboard-forgot-password"),
+    path("auth/set-password/", views.SetPasswordView.as_view(), name="dashboard-set-password"),
     path("me/", views.MeView.as_view(), name="dashboard-me"),
     path("me/password/", views.ChangePasswordView.as_view(), name="dashboard-change-password"),
     path("status/", views.StatusView.as_view(), name="dashboard-status"),
@@ -32,6 +34,7 @@ urlpatterns = [
 
     path("team/", views.TeamView.as_view(), name="dashboard-team"),
     path("team/<int:profile_id>/", views.TeamMemberView.as_view(), name="dashboard-team-member"),
+    path("team/<int:profile_id>/invite/", views.TeamInviteView.as_view(), name="dashboard-team-invite"),
     path("settings/", views.SettingsView.as_view(), name="dashboard-settings"),
     path("targets/", views.TargetsView.as_view(), name="dashboard-targets"),
     path("sync/", views.SyncTriggerView.as_view(), name="dashboard-sync"),

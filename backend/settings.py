@@ -191,6 +191,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_URLS_REGEX = r'^/api/dashboard/.*$'  # CORS only for the dashboard API
 
+# Base URL of the dashboard frontend, used in invite / password-reset links (dashboard/invites.py).
+DASHBOARD_FRONTEND_URL = config('DASHBOARD_FRONTEND_URL', default='https://dashboard.flipfunding.com')
+# Outer limit for those links; each kind also has its own shorter expiry (invite 7 days, reset 1 day).
+PASSWORD_RESET_TIMEOUT = 7 * 24 * 3600
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',

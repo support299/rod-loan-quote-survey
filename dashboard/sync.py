@@ -155,6 +155,7 @@ class SyncContext:
     users: dict = field(default_factory=dict)  # ghl user id -> GHLUser
     programs: dict = field(default_factory=dict)  # opportunity id -> loan type
     known_aes: dict = field(default_factory=dict)  # lower name -> canonical AE name
+    ae_options: list = field(default_factory=list)  # GHL "Account Executive" dropdown options
     timezone_name: str = ""  # company timezone, loaded once per run
 
     @property
@@ -223,6 +224,7 @@ def load_field_names(ctx, refresh=False):
         cached = {"names": names, "ae_options": list(ae_options)}
         cache.set(key, cached, 60 * 60)
     ctx.field_names = cached["names"]
+    ctx.ae_options = [o.strip() for o in cached["ae_options"] if o and o.strip() and o.strip().lower() != "n/a"]
     ctx.known_aes = _known_aes(cached["ae_options"])
     return ctx.field_names
 

@@ -23,6 +23,7 @@ __all__ = [
     "list_location_custom_fields",
     "list_location_users",
     "list_pipelines",
+    "update_opportunity",
     "update_opportunity_fields",
 ]
 
@@ -86,5 +87,21 @@ def update_opportunity_fields(opportunity_id, custom_fields, access_token=None):
         json={"customFields": custom_fields},
         timeout=30,
     )
+    resp.raise_for_status()
+    return resp.json() if resp.content else {}
+
+
+def update_opportunity(opportunity_id, monetary_value=None, custom_fields=None, access_token=None):
+    """PUT /opportunities/{id}: Opportunity Value (monetaryValue) and/or customFields [{id, field_value}]."""
+    payload = {}
+    if monetary_value is not None:
+        payload["monetaryValue"] = float(monetary_value)
+    if custom_fields:
+        payload["customFields"] = custom_fields
+    if not payload:
+        return {}
+    headers = _auth_headers(access_token)
+    headers["Content-Type"] = "application/json"
+    resp = requests.put(f"{GHL_OPPORTUNITIES_BASE}/{opportunity_id}", headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json() if resp.content else {}

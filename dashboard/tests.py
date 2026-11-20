@@ -670,3 +670,158 @@ class InviteGhlTests(TestCase):
                 mock.patch.object(invites, "list_location_custom_fields", return_value=[]):
             with self.assertRaisesMessage(invites.InviteError, "Dashboard Invite Link"):
                 invites.send_link(user, "invite")
+
+
+class StallAlertTests(DashboardDataMixin, TestCase):
+    """Rod (Nov 2026): one alert at 30 days stalled, 02 Processing only, AE + CEO, forward-only."""
+
+    def setUp(self):
+        self.build()
+        self.now = timezone.now()
+        CompanySettings.objects.filter(pk=1).update(stall_alerts_since=self.now - timedelta(days=5))
+
+    def _add(self, opp_id, stage, days, ae=None):
+        fields = {"f_ae": ae} if ae else {}
+        upsert_opportunity(opp(opp_id, stage=stage, created=self.now - timedelta(days=days + 5),
+                               stage_at=self.now - timedelta(days=days), contact=f"c_{opp_id}", **fields), make_ctx())
+
+    def _alerts(self, deal_id):
+        from .models import Notification
+
+        return sorted(Notification.objects.filter(kind="stall_alert", deal_id=deal_id).values_list("recipient__username", flat=True))
+
+    def test_who_gets_alerted_and_only_once(self):
+        self._add("p1", "onboarded", 31, ae="Anna")  # hit 30 days yesterday → alert
+        self._add("p2", "onboarded", 60, ae="Anna")  # hit 30 days before go-live → no alert
+        self._add("p3", "qc_review", 31)  # no AE → CEO only
+        self._add("p4", "onboarded", 31, ae="Kurt")  # AE without a login → CEO only
+        self._add("l1", "under_review", 31, ae="Anna")  # 01 pipeline → no alert
+        self._add("p5", "onboarded", 29, ae="Anna")  # not yet 30 days
+        stats = refresh_issues()
+        self.assertEqual(stats["stall_alerts"], 3)
+        self.assertEqual(self._alerts("p1"), ["anna@x.com", "rod@x.com"])
+        self.assertEqual(self._alerts("p2"), [])
+        self.assertEqual(self._alerts("p3"), ["rod@x.com"])
+        self.assertEqual(self._alerts("p4"), ["rod@x.com"])
+        self.assertEqual(self._alerts("l1"), [])
+        self.assertEqual(self._alerts("p5"), [])
+        self.assertEqual(refresh_issues()["stall_alerts"], 0)  # never twice
+        self.assertEqual(self._alerts("p1"), ["anna@x.com", "rod@x.com"])
+
+    def test_paused_loans_are_not_alerted(self):
+        self._add("p1", "onboarded", 31, ae="Anna")
+        DealMeta.objects.create(deal_id="p1", paused=True, pause_review_date=date.today() + timedelta(days=10))
+        refresh_issues()
+        self.assertEqual(self._alerts("p1"), [])
+
+    def test_first_run_without_start_date_starts_now(self):
+        CompanySettings.objects.filter(pk=1).update(stall_alerts_since=None)
+        self._add("p1", "onboarded", 31, ae="Anna")
+        self.assertEqual(refresh_issues()["stall_alerts"], 0)
+        self.assertIsNotNone(CompanySettings.load().stall_alerts_since)
+
+    def test_stalled_issue_no_longer_notifies_but_no_ae_is_flagged(self):
+        from .models import Notification
+
+        refresh_issues()  # baseline
+        self._add("p6", "onboarded", 10)  # stalled (over the 7-day stage limit), no AE
+        refresh_issues()
+        self.assertTrue(DealIssue.objects.filter(deal_id="p6", issue_type="stalled_stage").exists())
+        self.assertTrue(DealIssue.objects.filter(deal_id="p6", issue_type="no_ae", status="open").exists())
+        self.assertFalse(Notification.objects.filter(kind="issue_opened", deal_id="p6").exists())
+        self.assertFalse(DealIssue.objects.filter(deal_id="r1", issue_type="no_ae").exists())  # has an AE
+        self.assertFalse(DealIssue.objects.filter(deal_id="a1", issue_type="no_ae").exists())  # funded
+
+    def test_stalled_owner_is_ae_on_02(self):
+        refresh_issues()
+        issue = DealIssue.objects.get(deal_id="r1", issue_type="stalled_stage")
+        self.assertEqual(issue.owner.user, self.ceo)  # Rod is r1's AE
+
+
+class DealEditTests(DashboardDataMixin, TestCase):
+    """Rod (Nov 2026): CEO, AE and processor can edit Total Loan Amount, AE and Opportunity Value."""
+
+    def setUp(self):
+        self.build()
+        self.client = APIClient()
+        ctx = SimpleNamespace(ae_options=["Rod", "Anna", "Kurt"], known_aes={"anna": "Anna", "rod": "Rod"}, token="tok",
+                              field_names={"f_ae": "Account Executive", "f_amt": "Total Loan Amount"})
+        self.addCleanup(mock.patch.stopall)
+        mock.patch("dashboard.sync.build_context", return_value=ctx).start()
+        self.ghl = mock.patch("dashboard.ghl_client.update_opportunity", return_value={}).start()
+
+    def login(self, user):
+        tok = self.client.post("/api/dashboard/auth/login/", {"username": user.username, "password": "pw123456"}, format="json").json()["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+
+    def patch(self, deal_id, body):
+        return self.client.patch(f"/api/dashboard/deals/{deal_id}/fields/", body, format="json")
+
+    def test_ceo_edits_all_three_and_history_shows_who(self):
+        self.login(self.ceo)
+        self.assertEqual(self.client.get("/api/dashboard/deals/r1/fields/").json()["ae_options"], ["Rod", "Anna", "Kurt"])
+        resp = self.patch("r1", {"ae": "anna", "total_loan_amount": "$250,000", "monetary_value": 5000})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        kwargs = self.ghl.call_args.kwargs
+        self.assertEqual(kwargs["monetary_value"], Decimal("5000.00"))
+        self.assertEqual(kwargs["custom_fields"], [{"id": "f_ae", "field_value": "Anna"}, {"id": "f_amt", "field_value": 250000.0}])
+        deal = Deal.objects.get(pk="r1")
+        self.assertEqual((deal.ae_name, deal.total_loan_amount, deal.monetary_value), ("Anna", Decimal("250000.00"), Decimal("5000.00")))
+        data = resp.json()
+        self.assertEqual(data["changed"], ["ae", "monetary_value", "total_loan_amount"])
+        mine = [e for e in data["events"] if e["source"] == "dashboard"]
+        self.assertEqual({e["kind"] for e in mine}, {"ae_change", "loan_amount_change", "value_change"})
+        self.assertTrue(all(e["by"] == "rod@x.com" for e in mine))
+        amount = next(e for e in mine if e["kind"] == "loan_amount_change")
+        self.assertEqual((amount["from"], amount["to"]), ("$200,000.00", "$250,000.00"))
+
+    def test_unchanged_values_do_not_call_ghl(self):
+        self.login(self.ceo)
+        resp = self.patch("r1", {"ae": "Rod", "total_loan_amount": "200000"})
+        self.assertEqual(resp.json()["changed"], [])
+        self.ghl.assert_not_called()
+
+    def test_who_can_edit(self):
+        self.login(self.anna)
+        self.assertEqual(self.patch("r1", {"monetary_value": 1}).status_code, 404)  # not her loan
+        self.assertTrue(self.patch("a1", {"monetary_value": 1}).json()["visible"])
+        self.login(self.leoma)  # processor on a1
+        self.assertEqual(self.patch("a1", {"monetary_value": 2}).status_code, 200)
+        analyst = get_user_model().objects.create_user("mae@x.com", password="pw123456")
+        DashboardProfile.objects.create(user=analyst, role="analyst", analyst_name="Mae")
+        self.login(analyst)
+        self.assertEqual(self.patch("a1", {"monetary_value": 3}).status_code, 403)
+        self.assertFalse(self.client.get("/api/dashboard/deals/a1/").json()["can_edit_fields"])
+
+    def test_bad_values_rejected(self):
+        self.login(self.ceo)
+        for body in ({"ae": "Bob"}, {"total_loan_amount": "-5"}, {"monetary_value": "abc"}, {"monetary_value": ""},
+                     {"total_loan_amount": "1.234"}, {"monetary_value": "NaN"}):
+            self.assertEqual(self.patch("r1", body).status_code, 400, body)
+        self.ghl.assert_not_called()
+
+    def test_ghl_failure_changes_nothing(self):
+        import requests
+
+        self.ghl.side_effect = requests.HTTPError("422")
+        self.login(self.ceo)
+        resp = self.patch("r1", {"monetary_value": 7000})
+        self.assertEqual(resp.status_code, 502)
+        self.assertIsNone(Deal.objects.get(pk="r1").monetary_value)
+        self.assertFalse(DealEvent.objects.filter(deal_id="r1", source="dashboard").exists())
+
+    def test_setting_ae_clears_no_ae_flag(self):
+        upsert_opportunity(opp("p3", stage="qc_review", stage_at=timezone.now() - timedelta(days=2), contact="c3"), make_ctx())
+        refresh_issues()
+        self.login(self.ceo)
+        row = self.client.post("/api/dashboard/deals/lookup/", {"ids": ["p3"]}, format="json").json()["results"][0]
+        self.assertTrue(row["no_ae"])
+        self.assertEqual(self.patch("p3", {"ae": "Kurt"}).status_code, 200)
+        self.assertEqual(DealIssue.objects.get(deal_id="p3", issue_type="no_ae").status, "resolved")
+
+    def test_ae_handing_loan_away_is_told_it_left_their_list(self):
+        self.login(self.anna)
+        resp = self.patch("a1", {"ae": "Kurt"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertFalse(resp.json()["visible"])
+        self.assertEqual(self.client.get("/api/dashboard/deals/a1/").status_code, 404)

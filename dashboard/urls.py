@@ -23,6 +23,7 @@ urlpatterns = [
     path("deals/lookup/", views.DealLookupView.as_view(), name="dashboard-deal-lookup"),
     path("deals/<str:deal_id>/", views.DealDetailView.as_view(), name="dashboard-deal-detail"),
     path("deals/<str:deal_id>/meta/", views.DealMetaView.as_view(), name="dashboard-deal-meta"),
+    path("deals/<str:deal_id>/fields/", views.DealFieldsView.as_view(), name="dashboard-deal-fields"),
     path("deals/<str:deal_id>/notes/", views.DealNoteView.as_view(), name="dashboard-deal-notes"),
     path("deals/<str:deal_id>/tasks/", views.DealTaskView.as_view(), name="dashboard-deal-tasks"),
 

@@ -180,6 +180,7 @@ ISSUE_INCOMPLETE_APP = "incomplete_application"
 ISSUE_MISSING_LOSS = "missing_loss_info"
 ISSUE_PAUSE_OVERDUE = "paused_review_overdue"
 ISSUE_MISSING_FINANCIALS = "missing_financials"
+ISSUE_NO_AE = "no_ae"
 ISSUE_TYPE_CHOICES = [
     (ISSUE_STALLED, "Stalled stage"),
     (ISSUE_NO_PROGRESS, "Missing meaningful progress"),
@@ -188,4 +189,5 @@ ISSUE_TYPE_CHOICES = [
     (ISSUE_MISSING_LOSS, "Missing loss information"),
     (ISSUE_PAUSE_OVERDUE, "Paused review overdue"),
     (ISSUE_MISSING_FINANCIALS, "Missing loan financials"),
+    (ISSUE_NO_AE, "No AE (02 Processing)"),
 ]

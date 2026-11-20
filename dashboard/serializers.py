@@ -1,4 +1,5 @@
 """Plain dict serializers for dashboard API responses."""
+from .access import DEAL_FIELD_EDITORS
 from .constants import ISSUE_TYPE_CHOICES, STAGE_LABELS
 from .metrics import _meta, _num, days_in_stage, is_paused, is_stalled, loss_reason
 
@@ -22,6 +23,8 @@ def deal_row(ds, deal):
         "outcome": "funded" if deal.is_funded else "lost" if deal.is_lost else "open",
         "paused": is_paused(deal),
         "ae": deal.ae_name,
+        # Rod: every 02 Processing loan should have an AE.
+        "no_ae": not deal.ae_name and deal.pipeline_key == "processing" and deal.status == "open" and not deal.is_funded,
         "processors": [n for n in (deal.processor_name, deal.processor2_name) if n],
         "analysts": [n for n in (deal.analyst_name, deal.analyst2_name) if n],
         "deal_sourced_by": deal.deal_sourced_by,
@@ -56,6 +59,9 @@ def deal_detail(ds, deal):
         "termsheet_status": deal.termsheet_status,
         "ae_at_application": deal.ae_at_application,
         "ae_at_funding": deal.ae_at_funding,
+        "total_loan_amount": _num(deal.total_loan_amount),
+        "monetary_value": _num(deal.monetary_value),
+        "can_edit_fields": ds.role in DEAL_FIELD_EDITORS,
         "financials": {k: (_num(v) if not isinstance(v, (bool, list, str)) else v) for k, v in fin.items()},
         "fees": {
             "origination_fee": _num(deal.origination_fee),
@@ -83,8 +89,8 @@ def deal_detail(ds, deal):
             for m in deal.milestones.order_by("reached_at")
         ],
         "events": [
-            {"kind": e.kind, "from": e.from_value, "to": e.to_value, "at": e.occurred_at, "source": e.source}
-            for e in deal.events.order_by("-occurred_at")[:100]
+            {"kind": e.kind, "from": e.from_value, "to": e.to_value, "at": e.occurred_at, "source": e.source, "by": _user_name(e.changed_by)}
+            for e in deal.events.select_related("changed_by").order_by("-occurred_at", "-id")[:100]
         ],
         "issues": [issue_row(ds, i, include_deal=False) for i in deal.issues.select_related("owner__user").all()[:50]],
         "notes": [

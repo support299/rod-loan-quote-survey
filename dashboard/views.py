@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from . import ghl_client, invites, metrics
 from .access import (
     MODULES_BY_ROLE,
+    can_edit_deal_fields,
     get_profile,
     get_role,
     is_ceo,
@@ -27,8 +28,11 @@ from .access import (
     module_permission,
 )
 from .constants import (
+    FIELD_AE,
     FIELD_LOSS_NOTES,
     FIELD_LOSS_REASON,
+    FIELD_TOTAL_LOAN_AMOUNT,
+    ISSUE_NO_AE,
     ISSUE_TYPE_CHOICES,
     LOSS_OUTCOMES,
     LOSS_REASONS,
@@ -42,6 +46,8 @@ from .models import (
     ActivityLog,
     CompanySettings,
     DashboardProfile,
+    Deal,
+    DealEvent,
     DealIssue,
     DealMeta,
     DealNote,
@@ -453,6 +459,134 @@ def _push_loss_to_ghl(deal, meta):
     except Exception:  # noqa: BLE001
         logger.exception("Could not push loss info to GHL for %s", deal.ghl_id)
         return False
+
+
+MAX_AMOUNT = Decimal("100000000000")  # $100B: anything bigger is a typo
+
+
+def _amount(value, label):
+    """A dollar amount >= 0 with at most 2 decimals, or a ValueError with a message for the user."""
+    if value in (None, ""):
+        raise ValueError(f"Enter the {label}.")
+    try:
+        amount = Decimal(str(value).replace(",", "").replace("$", "").strip())
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{label} must be a number.")
+    if not amount.is_finite() or amount < 0 or amount >= MAX_AMOUNT:
+        raise ValueError(f"{label} must be a positive amount.")
+    if amount != amount.quantize(Decimal("0.01")):
+        raise ValueError(f"{label} can have at most 2 decimals.")
+    return amount.quantize(Decimal("0.01"))
+
+
+def _money_text(value):
+    return "" if value is None else f"${value:,.2f}"
+
+
+def _deal_edit_context():
+    from .sync import build_context
+
+    try:
+        return build_context(), None
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not load GHL fields for the deal edit form")
+        return None, Response({"error": "Could not reach GHL. Please try again."}, status=502)
+
+
+class DealFieldsView(APIView):
+    """
+    Rod (Nov 2026): Total Loan Amount, AE and Opportunity Value can be edited in the dashboard
+    by the CEO, and by AEs / processors on their own loans (they only see those). Saved to GHL
+    first; the dashboard copy only changes once GHL accepted it.
+    GET: the AE choices (GHL "Account Executive" dropdown).
+    PATCH {total_loan_amount, ae, monetary_value} (any subset).
+    """
+
+    permission_classes = [IsAuthenticated, module_permission("deals")]
+
+    def get(self, request, deal_id):
+        _scoped_deal(request, deal_id)
+        if not can_edit_deal_fields(request.user):
+            return Response({"error": "You can't edit loan details."}, status=403)
+        ctx, error = _deal_edit_context()
+        if error:
+            return error
+        return Response({"ae_options": ctx.ae_options})
+
+    def patch(self, request, deal_id):
+        from .sync import field_id_for
+
+        deal = _scoped_deal(request, deal_id)
+        if not can_edit_deal_fields(request.user):
+            return Response({"error": "You can't edit loan details."}, status=403)
+        data = request.data
+        new = {}
+        try:
+            if "total_loan_amount" in data:
+                new["total_loan_amount"] = _amount(data.get("total_loan_amount"), "Total Loan Amount")
+            if "monetary_value" in data:
+                new["monetary_value"] = _amount(data.get("monetary_value"), "Opportunity Value")
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+        ctx, error = _deal_edit_context()
+        if error:
+            return error
+        if "ae" in data:
+            choice = str(data.get("ae") or "").strip().lower()
+            match = next((o for o in ctx.ae_options if o.lower() == choice), None)
+            if not match:
+                return Response({"error": "Choose an AE from the list."}, status=400)
+            new["ae"] = match
+
+        before = {"ae": deal.ae_name, "total_loan_amount": deal.total_loan_amount, "monetary_value": deal.monetary_value}
+        changed = {k: v for k, v in new.items() if k != "ae" and v != before[k]}
+        if "ae" in new and new["ae"].lower() != (deal.ae_name or "").lower():
+            changed["ae"] = new["ae"]
+        if not changed:
+            return Response({**deal_detail(metrics.load_dataset(request.user), deal), "changed": []})
+
+        custom_fields = []
+        for key, field_name in (("ae", FIELD_AE), ("total_loan_amount", FIELD_TOTAL_LOAN_AMOUNT)):
+            if key not in changed:
+                continue
+            field_id = field_id_for(ctx, field_name)
+            if not field_id:
+                return Response({"error": f'The GHL field "{field_name}" was not found.'}, status=502)
+            value = changed[key]
+            custom_fields.append({"id": field_id, "field_value": float(value) if key == "total_loan_amount" else value})
+        try:
+            ghl_client.update_opportunity(deal.ghl_id, monetary_value=changed.get("monetary_value"),
+                                          custom_fields=custom_fields, access_token=ctx.token)
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not save deal fields to GHL for %s", deal.ghl_id)
+            return Response({"error": "GHL didn't accept the change, so nothing was saved. Please try again."}, status=502)
+
+        # GHL has it now; mirror it so the page and KPIs update before the next sync.
+        now = timezone.now()
+        update, events = {}, []
+        if "ae" in changed:
+            ae_name = ctx.known_aes.get(changed["ae"].lower(), changed["ae"])[:128]
+            update["ae_name"] = ae_name
+            events.append(("ae_change", before["ae"], ae_name))
+        for key, kind in (("total_loan_amount", "loan_amount_change"), ("monetary_value", "value_change")):
+            if key in changed:
+                update[key] = changed[key]
+                events.append((kind, _money_text(before[key]), _money_text(changed[key])))
+        with transaction.atomic():
+            Deal.objects.filter(pk=deal.pk).update(**update)
+            for kind, old, value in events:
+                DealEvent.objects.create(deal=deal, kind=kind, from_value=str(old or "")[:255], to_value=str(value or "")[:255],
+                                         occurred_at=now, source="dashboard", changed_by=request.user)
+            if "ae" in changed:
+                DealIssue.objects.filter(deal=deal, issue_type=ISSUE_NO_AE).exclude(status=DealIssue.STATUS_RESOLVED).update(
+                    status=DealIssue.STATUS_RESOLVED, auto_resolved=True, resolved_at=now,
+                    resolution_note="AE set in the dashboard.", updated_at=now)
+        _log(request, "deal_fields_updated", deal=deal,
+             changes={k: [str(before[k] if before[k] is not None else ""), str(v)] for k, v in changed.items()})
+        deal.refresh_from_db()
+        # An AE who hands the loan to another AE can no longer open it.
+        visible = metrics.base_queryset(request.user).filter(pk=deal.pk).exists()
+        return Response({**deal_detail(metrics.load_dataset(request.user), deal), "changed": sorted(changed), "visible": visible})
 
 
 class DealNoteView(APIView):

@@ -50,6 +50,15 @@ def is_ceo(user):
     return get_role(user) == ROLE_CEO
 
 
+# Rod (Nov 2026): who can edit Total Loan Amount, AE and Opportunity Value in the dashboard.
+# AEs and processors only see their own loans, so they can only edit those.
+DEAL_FIELD_EDITORS = (ROLE_CEO, ROLE_AE, ROLE_PROCESSOR)
+
+
+def can_edit_deal_fields(user):
+    return get_role(user) in DEAL_FIELD_EDITORS
+
+
 def deal_scope_q(user):
     """Q filter limiting deals to what the user may see; None = everything."""
     role = get_role(user)

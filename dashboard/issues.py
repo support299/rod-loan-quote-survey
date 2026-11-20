@@ -17,6 +17,7 @@ from .constants import (
     ISSUE_INCOMPLETE_APP,
     ISSUE_MISSING_FINANCIALS,
     ISSUE_MISSING_LOSS,
+    ISSUE_NO_AE,
     ISSUE_NO_PROGRESS,
     ISSUE_PAUSE_OVERDUE,
     ISSUE_STALLED,
@@ -36,7 +37,7 @@ from .metrics import (
     local_today,
     loss_reason,
 )
-from .models import DashboardProfile, DealEvent, DealIssue, DealNote, DealTask, Notification
+from .models import CompanySettings, DashboardProfile, DealEvent, DealIssue, DealNote, DealTask, Notification, StallAlert
 
 logger = logging.getLogger(__name__)
 ISSUE_LABELS = dict(ISSUE_TYPE_CHOICES)
@@ -79,8 +80,15 @@ class Owners:
                 return None, name
         return self.ae(deal)
 
+    def analyst(self, deal):
+        for name in (deal.analyst_name, deal.analyst2_name):
+            if name and name.lower() in self.by_analyst:
+                return self.by_analyst[name.lower()], name
+        return None, deal.analyst_name or deal.analyst2_name
+
     def stage_owner(self, deal):
-        return self.processor(deal) if deal.pipeline_key == "processing" else self.ae(deal)
+        """Rod: the AE follows up on 02 Processing loans, the Loan Analyst on 01 Loan Pipeline loans."""
+        return self.ae(deal) if deal.pipeline_key == "processing" else self.analyst(deal)
 
 
 def _last_human_activity(deal_ids):
@@ -159,6 +167,10 @@ def evaluate(ds, owners, activity):
             if missing:
                 yield deal, ISSUE_MISSING_FINANCIALS, "high", 0, {"missing": missing}, owners.processor(deal)
 
+        # Rod: every loan in 02 Processing should have an AE.
+        if is_open(deal) and deal.pipeline_key == "processing" and not deal.ae_name:
+            yield deal, ISSUE_NO_AE, "high", 0, {"stage": deal.stage_name}, (None, "")
+
 
 def refresh_issues():
     ds = load_dataset(None, system=True)
@@ -204,7 +216,8 @@ def refresh_issues():
                 details=details, owner=owner, owner_name=owner_name or "",
             )
             stats["opened"] += 1
-            if baseline or severity == "low":
+            # Stalled loans alert through send_stall_alerts (30 days, 02 only), not here.
+            if baseline or severity == "low" or itype == ISSUE_STALLED:
                 continue
             recipients = [owner.user] if owner else []
             if severity == "critical":
@@ -225,7 +238,49 @@ def refresh_issues():
             if key not in triggered:
                 issue.details = {k: v for k, v in issue.details.items() if k != "hold"}
                 issue.save(update_fields=["details", "updated_at"])
+    stats["stall_alerts"] = send_stall_alerts(ds, owners, ceos)
     return stats
+
+
+def send_stall_alerts(ds, owners, ceos):
+    """
+    Rod (Nov 2026): when an open loan in 02 Processing has sat in its stage for
+    stall_alert_days (30), alert its AE and the CEO once in the dashboard. No AE: CEO only.
+    Only loans that reach the mark after stall_alerts_since are alerted, so the old backlog
+    stays in the stalled list instead of flooding everyone.
+    """
+    s = ds.settings
+    if not s.stall_alerts_since:
+        s.stall_alerts_since = ds.now
+        CompanySettings.objects.filter(pk=s.pk).update(stall_alerts_since=ds.now)
+    limit = s.stall_alert_days
+    if not limit:
+        return 0
+    sent = 0
+    for deal in ds.deals:
+        if not (is_open(deal) and deal.pipeline_key == "processing" and deal.stage_key) or is_paused(deal):
+            continue
+        entered = ds.ms(deal, deal.stage_key) or deal.last_stage_change_at or deal.ghl_created_at
+        days = days_in_stage(ds, deal)
+        if not entered or days is None or days < limit or entered + timedelta(days=limit) < s.stall_alerts_since:
+            continue
+        alert, created = StallAlert.objects.get_or_create(deal=deal, stage_key=deal.stage_key, stage_entered_at=entered)
+        if not created:
+            continue
+        owner, ae_name = owners.ae(deal)
+        recipients = ([owner.user] if owner else []) + ceos
+        if not deal.ae_name:
+            who = "No AE is set on this loan."
+        elif not owner:
+            who = f"AE: {ae_name} (no dashboard login, so only you were alerted)."
+        else:
+            who = f"AE: {ae_name}."
+        notify(recipients, "stall_alert", f"Stalled {days} days in {deal.stage_name}: {deal.name}",
+               f"No stage movement for {days} days in 02 Processing. {who}", deal=deal)
+        alert.recipients = sorted({u.get_username() for u in recipients if u})
+        alert.save(update_fields=["recipients"])
+        sent += 1
+    return sent
 
 
 def _issue_body(details):

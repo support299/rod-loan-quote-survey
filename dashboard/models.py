@@ -32,6 +32,10 @@ class CompanySettings(models.Model):
     # Open deals idle longer than this are "dormant": listed separately at low severity
     # so ~1,100 long-idle 01-pipeline leads do not bury the real blockers.
     dormant_days = models.PositiveIntegerField(default=30)  # Rod: 30 days with no movement
+    # Rod (Nov 2026): one alert when an open 02 Processing loan has sat in its stage this many
+    # days, to the AE and the CEO. Only loans that reach it after stall_alerts_since are alerted.
+    stall_alert_days = models.PositiveIntegerField(default=30)
+    stall_alerts_since = models.DateTimeField(null=True, blank=True)
     no_progress_days = models.PositiveIntegerField(default=14)
     incomplete_application_days = models.PositiveIntegerField(default=10)
     relationship_inactivity_days = models.PositiveIntegerField(default=90)
@@ -240,6 +244,8 @@ class DealEvent(models.Model):
         ("analyst_change", "Analyst change"),
         ("processor_change", "Processor change"),
         ("close_date_change", "Expected close date change"),
+        ("loan_amount_change", "Total loan amount change"),
+        ("value_change", "Opportunity value change"),
         ("left_scope", "Left 01/02 pipelines"),
         ("deleted", "Deleted"),
     ]
@@ -249,6 +255,8 @@ class DealEvent(models.Model):
     to_value = models.CharField(max_length=255, blank=True, default="")
     occurred_at = models.DateTimeField(db_index=True)
     source = models.CharField(max_length=20, default="sync")
+    # Set when the change was made in the dashboard (source "dashboard").
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     recorded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -339,6 +347,20 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class StallAlert(models.Model):
+    """One 30-day stalled alert per loan per stage visit, so it is never sent twice."""
+
+    deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name="stall_alerts")
+    stage_key = models.CharField(max_length=40)
+    stage_entered_at = models.DateTimeField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+    recipients = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        unique_together = [("deal", "stage_key", "stage_entered_at")]
+        ordering = ["-sent_at"]
 
 
 class ActivityLog(models.Model):
